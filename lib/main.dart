@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:innova/login/loginScreen.dart';
 import 'package:innova/navigation/internNavigationScreen.dart';
+import 'package:innova/navigation/managerNavigationScreen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -20,7 +21,7 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       title: 'M.I.S. Task',
       debugShowCheckedModeBanner: false,
-      home: const LoginScreen(),
+      home: const ManagerNavigationScreen(),
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,

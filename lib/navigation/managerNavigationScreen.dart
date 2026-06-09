@@ -52,12 +52,13 @@ class _ManagerNavigationScreenState extends State<ManagerNavigationScreen> {
               hoverTextStyle: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w500,
+                fontSize: 10,
               ),
               hoverIconTheme: const IconThemeData(
                 color: Colors.white,
                 size: 20,
               ),
-              textStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
+              textStyle: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 10),
               iconTheme: IconThemeData(
                 color: Colors.white.withOpacity(0.7),
                 size: 20,
