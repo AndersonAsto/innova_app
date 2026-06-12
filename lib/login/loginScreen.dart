@@ -36,6 +36,10 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> login() async {
+    debugPrint('IS MANAGER: $isManager');
+    debugPrint('EMAIL: ${emailController.text.trim()}');
+    debugPrint('PASSWORD LENGTH: ${passwordController.text.trim().length}');
+
     try {
 
       final result = await AuthService(
@@ -174,7 +178,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             contentPadding: EdgeInsets.all(10),
                             border: InputBorder.none,
                           ),
-                          controller: institutionalEmailInternController,
+                          controller: emailController,
                           enabled: true,
                         ),
                       ),
@@ -206,7 +210,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             border: InputBorder.none,
                           ),
-                          controller: passwordInternController,
+                          controller: passwordController,
                           enabled: true,
                         ),
                       ),

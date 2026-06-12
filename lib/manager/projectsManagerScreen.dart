@@ -143,12 +143,73 @@ class _ProjectsManagerScreenState extends State<ProjectsManagerScreen> {
   }
 
   Future<void> createProject() async {
-    await supabase.from('proyecto').insert({
-      'title': titleController.text.trim(),
-      'description': descriptionController.text.trim(),
-      'img_url': imageUrlController.text.trim(),
+    final title = titleController.text.trim();
+    final description = descriptionController.text.trim();
+    final imageUrl = imageUrlController.text.trim();
+
+    if (title.isEmpty) {
+      throw Exception('El título del proyecto es obligatorio');
+    }
+
+    final project = await supabase
+        .from('proyecto')
+        .insert({
+      'title': title,
+      'description': description,
+      'img_url': imageUrl,
       'status': projectStatus,
-    });
+    })
+        .select()
+        .single();
+
+    final projectId = project['id'];
+
+    try {
+      await supabase.from('kanban_columnas').insert([
+        {
+          'proyecto_id': projectId,
+          'name': 'Pendiente',
+          'position': 1,
+          'parent_column_id': null,
+          'is_default': true,
+          'status': true,
+        },
+        {
+          'proyecto_id': projectId,
+          'name': 'En Proceso',
+          'position': 2,
+          'parent_column_id': null,
+          'is_default': true,
+          'status': true,
+        },
+        {
+          'proyecto_id': projectId,
+          'name': 'Terminado',
+          'position': 3,
+          'parent_column_id': null,
+          'is_default': true,
+          'status': true,
+        },
+      ]);
+    } catch (e) {
+      await supabase
+          .from('proyecto')
+          .delete()
+          .eq('id', projectId);
+
+      throw Exception(
+        'No se pudieron crear las columnas Kanban del proyecto',
+      );
+    }
+
+    clearProjectForm();
+  }
+
+  void clearProjectForm() {
+    titleController.clear();
+    descriptionController.clear();
+    imageUrlController.clear();
+    projectStatus = true;
   }
 
   Future<void> updateProject(int projectId) async {
@@ -448,14 +509,35 @@ class _ProjectsManagerScreenState extends State<ProjectsManagerScreen> {
                 ),
                 CustomElevatedButton(
                   label: 'Confirmar',
-                  onPressed: () async{
-                    if (isEdit) {
-                      await updateProject(project?['id']);
-                    } else {
-                      await createProject();
-                    }
-                    if (mounted) {
+                  onPressed: () async {
+                    try {
+                      if (isEdit) {
+                        await updateProject(project?['id']);
+                      } else {
+                        await createProject();
+                      }
+
+                      if (!mounted) return;
+
                       Navigator.pop(context);
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            isEdit
+                                ? 'Proyecto actualizado correctamente'
+                                : 'Proyecto creado con columnas Kanban',
+                          ),
+                        ),
+                      );
+                    } catch (e) {
+                      if (!mounted) return;
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(e.toString()),
+                        ),
+                      );
                     }
                   },
                 ),
