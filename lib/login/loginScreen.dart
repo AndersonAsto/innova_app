@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:innova/environments/authService.dart';
 import 'package:innova/login/animation.dart';
+import 'package:innova/login/authGate.dart';
+import 'package:innova/main.dart';
 import 'package:innova/navigation/internNavigationScreen.dart';
 import 'package:innova/navigation/managerNavigationScreen.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../environments/environments.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -19,13 +23,8 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isPasswordVisible = false;
   bool isManager = true;
 
-  TextEditingController get emailController => isManager
-      ? institutionalEmailManagerController
-      : institutionalEmailInternController;
-
-  TextEditingController get passwordController => isManager
-      ? passwordManagerController
-      : passwordInternController;
+  TextEditingController get emailController => isManager ? institutionalEmailManagerController : institutionalEmailInternController;
+  TextEditingController get passwordController => isManager ? passwordManagerController : passwordInternController;
 
   @override
   void dispose() {
@@ -34,6 +33,63 @@ class _LoginScreenState extends State<LoginScreen> {
     institutionalEmailManagerController.dispose();
     passwordManagerController.dispose();
     super.dispose();
+  }
+
+  Future<void> login() async {
+    try {
+
+      final result = await AuthService(
+        supabase,
+      ).login(
+        email: emailController.text.trim(),
+        password: passwordController.text.trim(),
+      );
+      SessionService.profile = result['profile'];
+      if (!mounted) return;
+
+      if (result['type'] == 'manager') {
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ManagerNavigationScreen(
+              profile: result['profile'],
+            ),
+          ),
+        );
+
+      } else {
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => InternNavigationScreen(
+              profile: result['profile'],
+            ),
+          ),
+        );
+
+      }
+
+    } on AuthException catch (_) {
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Correo o contraseña incorrectos',
+          ),
+        ),
+      );
+
+    } catch (e) {
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString()),
+        ),
+      );
+
+    }
   }
 
   @override
@@ -156,13 +212,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 20,),
                       ElevatedButton(
-                        onPressed: () {
-                          if (isManager) {
-                            Navigator.push(context, MaterialPageRoute(builder: (context) => const ManagerNavigationScreen()));
-                          } else {
-                            Navigator.push(context, MaterialPageRoute(builder: (context) => const InternNavigationScreen()));
-                          }
-                        },
+                        onPressed: () => login(),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.black,
                           foregroundColor: Colors.white,

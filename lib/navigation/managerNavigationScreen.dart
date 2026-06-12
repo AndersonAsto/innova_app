@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:innova/login/loginScreen.dart';
+import 'package:innova/main.dart';
 import 'package:innova/manager/communicationsManagerScreen.dart';
 import 'package:innova/manager/internsManagerScreen.dart';
 import 'package:innova/manager/projectsManagerScreen.dart';
@@ -10,7 +12,8 @@ const sidebarActionColor = Color(0xff204760);
 final sidebarDivider = Divider(color: Colors.white.withOpacity(0.3), height: 1);
 
 class ManagerNavigationScreen extends StatefulWidget {
-  const ManagerNavigationScreen({super.key});
+  final Map<String, dynamic> profile;
+  const ManagerNavigationScreen({super.key, required this.profile});
 
   @override
   State<ManagerNavigationScreen> createState() => _ManagerNavigationScreenState();
@@ -112,20 +115,37 @@ class _ManagerNavigationScreenState extends State<ManagerNavigationScreen> {
                     children: [
                       buildCircularIcon(),
                       const SizedBox(width: 5,),
-                      const Flexible(
+                      Flexible(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Flexible(child: Text('Nombre Apellido', style: TextStyle(color: Colors.white, fontSize: 12),),),
+                            Flexible(child: Text('${widget.profile['names']} ${widget.profile['fathers_surname']}', style: TextStyle(color: Colors.white, fontSize: 12),),),
                             SizedBox(width: 5,),
-                            Flexible(child: Text('Rol', style: TextStyle(color: Colors.white, fontSize: 10),),),
+                            Flexible(child: Text(widget.profile['role'], style: TextStyle(color: Colors.white, fontSize: 10),),),
                           ],
                         ),
                       ),
                     ],
                   ) : buildCircularIcon(),
                 ),
+              );
+            },
+            footerBuilder: (context, extended) {
+              return ListTile(
+                leading: const Icon(
+                  Icons.logout,
+                  color: Colors.white,
+                ),
+                title: extended
+                    ? const Text(
+                  'Cerrar sesión',
+                  style: TextStyle(
+                    color: Colors.white,
+                  ),
+                )
+                    : null,
+                onTap: logout,
               );
             },
             items: const [
@@ -144,6 +164,16 @@ class _ManagerNavigationScreenState extends State<ManagerNavigationScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> logout() async {
+    await supabase.auth.signOut();
+    if (!mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginScreen(),),
+          (route) => false,
     );
   }
 }
