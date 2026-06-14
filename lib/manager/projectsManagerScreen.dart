@@ -278,7 +278,7 @@ class _ProjectsManagerScreenState extends State<ProjectsManagerScreen> {
                       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       child: DropdownButtonFormField<int>(
-                        initialValue: selectedLeaderId,
+                        value: selectedLeaderId,
                         style: const TextStyle(fontWeight: FontWeight.normal, color: Colors.black87, fontSize: 14),
                         decoration: const InputDecoration(
                           labelText: 'Líder del proyecto',

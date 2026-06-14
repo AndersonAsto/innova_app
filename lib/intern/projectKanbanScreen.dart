@@ -264,7 +264,7 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
     final bg   = _colBg(column['name']);
     final dot  = _colDot(column['name']);
     final text = _colText(column['name']);
-    final isMobile = MediaQuery.of(context).size.width < 700;
+    final isMobile = MediaQuery.of(context).size.width < 750;
 
     return DragTarget<Map<String, dynamic>>(
       onWillAccept: (task) => task != null && !isTaskLockedByOther(task),
@@ -478,7 +478,7 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           elevation: 0,
                         ),
-                        icon: const Icon(Icons.add_rounded, size: 16),
+                        icon: const Icon(Icons.add_rounded, size: 16, color: Colors.white,),
                         label: const Text('Nueva actividad', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                       ),
                     ],
