@@ -14,7 +14,7 @@ class CommunicationsInternScreen extends StatefulWidget {
 class _CommunicationsInternScreenState extends State<CommunicationsInternScreen> {
   List<Map<String, dynamic>> announcements = [];
   List<Map<String, dynamic>> leaderConversations = [];
-
+  int unreadChatNotifications = 0;
   bool isLoading = true;
   bool isLeaderUser = false;
 
@@ -24,6 +24,7 @@ class _CommunicationsInternScreenState extends State<CommunicationsInternScreen>
   void initState() {
     super.initState();
     loadData();
+    loadUnreadChatNotifications();
     subscribeAnnouncementsRealtime();
   }
 
@@ -36,6 +37,49 @@ class _CommunicationsInternScreenState extends State<CommunicationsInternScreen>
     super.dispose();
   }
 
+  Future<void> loadUnreadChatNotifications() async {
+    final myId = SessionService.profile!['id'];
+
+    final response = await supabase
+        .from('notificaciones')
+        .select()
+        .eq('practicante_id', myId)
+        .eq('is_read', false)
+        .not('mensaje_id', 'is', null);
+
+    if (!mounted) return;
+
+    setState(() {
+      unreadChatNotifications = response.length;
+    });
+  }
+
+  Future<void> markConversationAsRead(int conversationId) async {
+    final myId = SessionService.profile!['id'];
+
+    final messages = await supabase
+        .from('mensajes')
+        .select('id')
+        .eq('conversacion_id', conversationId)
+        .eq('sender_type', 'Gestor');
+
+    final messageIds = List<Map<String, dynamic>>.from(messages)
+        .map((e) => e['id'])
+        .toList();
+
+    if (messageIds.isEmpty) return;
+
+    await supabase
+        .from('notificaciones')
+        .update({
+      'is_read': true,
+    })
+        .eq('practicante_id', myId)
+        .inFilter('mensaje_id', messageIds);
+
+    await loadUnreadChatNotifications();
+  }
+
   void subscribeAnnouncementsRealtime() {
     announcementsChannel = supabase
         .channel('intern_announcements_${SessionService.profile!['id']}')
@@ -45,6 +89,7 @@ class _CommunicationsInternScreenState extends State<CommunicationsInternScreen>
       table: 'notificaciones',
       callback: (_) async {
         await loadData();
+        await loadUnreadChatNotifications();
       },
     )
         .onPostgresChanges(
@@ -53,6 +98,7 @@ class _CommunicationsInternScreenState extends State<CommunicationsInternScreen>
       table: 'anuncios_proyecto',
       callback: (_) async {
         await loadData();
+        await loadUnreadChatNotifications();
       },
     )
         .subscribe();
@@ -157,7 +203,8 @@ class _CommunicationsInternScreenState extends State<CommunicationsInternScreen>
         .single();
 
     await supabase.from('notificaciones').insert({
-      'practicante_id': myId,
+      'manager_id': managerId,
+      'practicante_id': null,
       'mensaje_id': message['id'],
       'anuncio_id': null,
       'is_read': false,
@@ -248,6 +295,7 @@ class _CommunicationsInternScreenState extends State<CommunicationsInternScreen>
   }
 
   Future<void> showChatModal(Map<String, dynamic> conversation) async {
+    await markConversationAsRead(conversation['id']);
     List<Map<String, dynamic>> messages = [];
     bool loadingMessages = true;
 
@@ -594,9 +642,37 @@ class _CommunicationsInternScreenState extends State<CommunicationsInternScreen>
   @override
   Widget build(BuildContext context) {
     final tabs = isLeaderUser
-        ? const [
-      Tab(icon: Icon(Icons.campaign), text: 'Anuncios'),
-      Tab(icon: Icon(Icons.chat), text: 'Chats'),
+        ? [
+      const Tab(icon: Icon(Icons.campaign), text: 'Anuncios'),
+      Tab(
+        icon: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            const Icon(Icons.chat),
+            if (unreadChatNotifications > 0)
+              Positioned(
+                right: -8,
+                top: -8,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(
+                    color: Colors.red,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Text(
+                    unreadChatNotifications.toString(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        text: 'Chats',
+      ),
     ]
         : const [
       Tab(icon: Icon(Icons.campaign), text: 'Anuncios'),
@@ -610,6 +686,8 @@ class _CommunicationsInternScreenState extends State<CommunicationsInternScreen>
         : [
       buildAnnouncementsTab(),
     ];
+
+    double screenWidth = MediaQuery.of(context).size.width;
 
     return DefaultTabController(
       length: tabs.length,

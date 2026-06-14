@@ -16,9 +16,10 @@ class _CommunicationsManagerScreenState extends State<CommunicationsManagerScree
   List<Map<String, dynamic>> projects = [];
   bool isLoading = true;
   RealtimeChannel? announcementsChannel;
-
   Map<String, dynamic>? selectedAnnouncementProject;
   List<Map<String, dynamic>> announcements = [];
+  RealtimeChannel? notificationsChannel;
+  int unreadChatNotifications = 0;
 
   final TextEditingController announcementTitleController = TextEditingController();
   final TextEditingController announcementMessageController = TextEditingController();
@@ -31,7 +32,93 @@ class _CommunicationsManagerScreenState extends State<CommunicationsManagerScree
     super.initState();
     loadProjects();
     loadAnnouncements();
+    loadUnreadNotifications();
     subscribeAnnouncementsRealtime();
+    subscribeNotificationsRealtime();
+  }
+
+  Future<void> markAnnouncementAsRead(int notificationId) async {
+    await supabase
+        .from('notificaciones')
+        .update({
+      'is_read': true,
+    })
+        .eq('id', notificationId);
+  }
+
+  @override
+  void dispose() {
+    announcementTitleController.dispose();
+    announcementMessageController.dispose();
+    announcementMeetingUrlController.dispose();
+    announcementVideoUrlController.dispose();
+    chatMessageController.dispose();
+    if (announcementsChannel != null) {
+      supabase.removeChannel(announcementsChannel!);
+    }
+    if (notificationsChannel != null) {
+      supabase.removeChannel(notificationsChannel!);
+    }
+    super.dispose();
+  }
+
+  Future<void> loadUnreadNotifications() async {
+    final managerId = SessionService.profile!['id'];
+
+    final response = await supabase
+        .from('notificaciones')
+        .select()
+        .eq('manager_id', managerId)
+        .eq('is_read', false)
+        .not('mensaje_id', 'is', null);
+
+    if (!mounted) return;
+
+    setState(() {
+      unreadChatNotifications = response.length;
+    });
+  }
+
+  void subscribeNotificationsRealtime() {
+    final managerId = SessionService.profile!['id'];
+
+    notificationsChannel = supabase
+        .channel('manager_notifications_$managerId')
+        .onPostgresChanges(
+      event: PostgresChangeEvent.all,
+      schema: 'public',
+      table: 'notificaciones',
+      callback: (_) async {
+        await loadUnreadNotifications();
+      },
+    )
+        .subscribe();
+  }
+
+  Future<void> markConversationAsRead(int conversationId) async {
+    final managerId = SessionService.profile!['id'];
+
+    final messages = await supabase
+        .from('mensajes')
+        .select('id')
+        .eq('conversacion_id', conversationId)
+        .eq('sender_type', 'Lider');
+
+    final messageIds = List<Map<String, dynamic>>.from(messages)
+        .map((e) => e['id'])
+        .toList();
+
+    if (messageIds.isEmpty) return;
+
+    await supabase
+        .from('notificaciones')
+        .update({
+      'is_read': true,
+    })
+        .eq('manager_id', managerId)
+        .inFilter('mensaje_id', messageIds);
+
+    await loadUnreadNotifications();
   }
 
   void subscribeAnnouncementsRealtime() {
@@ -267,18 +354,7 @@ class _CommunicationsManagerScreenState extends State<CommunicationsManagerScree
     });
   }
 
-  @override
-  void dispose() {
-    announcementTitleController.dispose();
-    announcementMessageController.dispose();
-    announcementMeetingUrlController.dispose();
-    announcementVideoUrlController.dispose();
-    chatMessageController.dispose();
-    if (announcementsChannel != null) {
-      supabase.removeChannel(announcementsChannel!);
-    }
-    super.dispose();
-  }
+
 
   Future<void> loadProjects() async {
     try {
@@ -538,9 +614,9 @@ class _CommunicationsManagerScreenState extends State<CommunicationsManagerScree
     required Map<String, dynamic> leader,
     required Map<String, dynamic> conversation,
   }) async {
+    await markConversationAsRead(conversation['id']);
     List<Map<String, dynamic>> messages = [];
     bool loadingMessages = true;
-
     RealtimeChannel? chatChannel;
 
     Future<void> refreshMessages(
@@ -901,16 +977,41 @@ class _CommunicationsManagerScreenState extends State<CommunicationsManagerScree
             'Comunicados',
             style: TextStyle(color: Colors.white, fontSize: 15),
           ),
-          bottom: const TabBar(
+          bottom: TabBar(
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white70,
             tabs: [
-              Tab(
+              const Tab(
                 icon: Icon(Icons.campaign),
                 text: 'Anuncios',
               ),
               Tab(
-                icon: Icon(Icons.chat),
+                icon: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    const Icon(Icons.chat),
+                    if (unreadChatNotifications > 0)
+                      Positioned(
+                        right: -8,
+                        top: -8,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            unreadChatNotifications.toString(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
                 text: 'Chats',
               ),
             ],
