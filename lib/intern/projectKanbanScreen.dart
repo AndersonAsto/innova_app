@@ -23,9 +23,14 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
   List<Map<String, dynamic>> columns = [];
   List<Map<String, dynamic>> tasks   = [];
   bool isLoading = true;
-
-  final TextEditingController taskTitleController       = TextEditingController();
+  final TextEditingController subColumnNameController = TextEditingController();
+  Map<String, dynamic>? selectedParentColumn;
+  final TextEditingController taskTitleController = TextEditingController();
   final TextEditingController taskDescriptionController = TextEditingController();
+  final ScrollController horizontalBoardController = ScrollController();
+  final ScrollController verticalBoardController = ScrollController();
+  List<Map<String, dynamic>> activeUsers = [];
+  RealtimeChannel? activeUsersChannel;
 
   // ─── Paleta Notion-like ───────────────────────────────────────────────────
   static const Color _primary  = Color(0xFF1A3A6B);
@@ -55,6 +60,9 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
     super.initState();
     loadBoard();
     subscribeRealtime();
+    loadActiveUsers();
+    setActiveUser();
+    subscribeActiveUsersRealtime();
   }
 
   @override
@@ -62,7 +70,342 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
     if (channel != null) supabase.removeChannel(channel!);
     taskTitleController.dispose();
     taskDescriptionController.dispose();
+    subColumnNameController.dispose();
+    horizontalBoardController.dispose();
+    verticalBoardController.dispose();
+    if (activeUsersChannel != null) {
+      supabase.removeChannel(activeUsersChannel!);
+    }
     super.dispose();
+  }
+  Future<void> setActiveUser() async {
+    await supabase.from('proyecto_usuarios_activos').upsert({
+      'proyecto_id': widget.project['id'],
+      'practicante_id': SessionService.profile!['id'],
+      'last_seen': DateTime.now().toIso8601String(),
+    }, onConflict: 'proyecto_id,practicante_id');
+  }
+
+  Future<void> loadActiveUsers() async {
+    final response = await supabase
+        .from('proyecto_usuarios_activos')
+        .select('''
+        *,
+        practicantes(
+          id,
+          names,
+          fathers_surname
+        )
+      ''')
+        .eq('proyecto_id', widget.project['id']);
+
+    if (!mounted) return;
+
+    setState(() {
+      activeUsers = List<Map<String, dynamic>>.from(response);
+    });
+  }
+
+  void subscribeActiveUsersRealtime() {
+    activeUsersChannel = supabase
+        .channel('active_users_${widget.project['id']}')
+        .onPostgresChanges(
+      event: PostgresChangeEvent.all,
+      schema: 'public',
+      table: 'proyecto_usuarios_activos',
+      callback: (_) async {
+        await loadActiveUsers();
+      },
+    )
+        .subscribe();
+  }
+
+  Color userColor(int id) {
+    final colors = [
+      Colors.red,
+      Colors.blue,
+      Colors.green,
+      Colors.orange,
+      Colors.purple,
+      Colors.teal,
+      Colors.pink,
+    ];
+
+    return colors[id % colors.length];
+  }
+
+  String initials(Map<String, dynamic> user) {
+    final name = user['names'] ?? '';
+    final father = user['fathers_surname'] ?? '';
+
+    return '${name.isNotEmpty ? name[0] : ''}${father.isNotEmpty ? father[0] : ''}';
+  }
+
+  Widget activeUsersBar() {
+    if (activeUsers.isEmpty) return const SizedBox();
+
+    return Wrap(
+      spacing: 6,
+      children: activeUsers.map((item) {
+        final user = item['practicantes'];
+        final id = user['id'];
+
+        return CircleAvatar(
+          radius: 14,
+          backgroundColor: userColor(id),
+          child: Text(
+            initials(user),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+
+  bool get isLeader => widget.myRole == 'Líder';
+
+  List<Map<String, dynamic>> get baseColumns {
+    return columns
+        .where((c) => c['parent_column_id'] == null)
+        .toList();
+  }
+
+  List<Map<String, dynamic>> childColumnsOf(int parentId) {
+    return columns
+        .where((c) => c['parent_column_id'] == parentId)
+        .toList()
+      ..sort((a, b) => (a['position'] ?? 0).compareTo(b['position'] ?? 0));
+  }
+
+  List<Map<String, dynamic>> get orderedColumns {
+    final ordered = <Map<String, dynamic>>[];
+
+    final bases = [...baseColumns]
+      ..sort((a, b) => (a['position'] ?? 0).compareTo(b['position'] ?? 0));
+
+    for (final base in bases) {
+      ordered.add(base);
+      ordered.addAll(childColumnsOf(base['id']));
+    }
+
+    return ordered;
+  }
+
+  Map<String, dynamic>? findBaseColumnByName(String name) {
+    try {
+      return baseColumns.firstWhere(
+            (c) => c['name'].toString().toLowerCase() == name.toLowerCase(),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  int maxSubColumnsForParent(String parentName) {
+    final name = parentName.toLowerCase();
+
+    if (name == 'en proceso') return 2;
+    if (name == 'terminado') return 1;
+
+    return 0;
+  }
+
+  List<Map<String, dynamic>> availableParentsForSubColumn() {
+    final enProceso = findBaseColumnByName('En Proceso');
+    final terminado = findBaseColumnByName('Terminado');
+
+    final available = <Map<String, dynamic>>[];
+
+    if (enProceso != null) {
+      final current = childColumnsOf(enProceso['id']).length;
+      if (current < 2) {
+        available.add(enProceso);
+      }
+    }
+
+    if (terminado != null) {
+      final current = childColumnsOf(terminado['id']).length;
+      if (current < 1) {
+        available.add(terminado);
+      }
+    }
+
+    return available;
+  }
+
+  Future<void> showCreateSubColumnDialog() async {
+    subColumnNameController.clear();
+    selectedParentColumn = null;
+
+    final parents = availableParentsForSubColumn();
+
+    if (parents.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Ya se alcanzó el máximo de subcolumnas para este proyecto'),
+        ),
+      );
+      return;
+    }
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: const Text(
+                'Nueva subcolumna',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: _primary,
+                ),
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    DropdownButtonFormField<Map<String, dynamic>>(
+                      value: selectedParentColumn,
+                      decoration: const InputDecoration(
+                        labelText: 'Columna principal',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: parents.map((parent) {
+                        final current = childColumnsOf(parent['id']).length;
+                        final max = maxSubColumnsForParent(parent['name']);
+
+                        return DropdownMenuItem<Map<String, dynamic>>(
+                          value: parent,
+                          child: Text(
+                            '${parent['name']} ($current/$max)',
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        setDialogState(() {
+                          selectedParentColumn = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    _dialogField(
+                      'Nombre de subcolumna',
+                      subColumnNameController,
+                      Icons.view_column_rounded,
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Límites: En Proceso permite 2 subcolumnas. Terminado permite 1 subcolumna.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _primary,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () async {
+                    try {
+                      await createSubColumn();
+
+                      if (!mounted) return;
+
+                      Navigator.pop(context);
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Subcolumna creada correctamente'),
+                        ),
+                      );
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(e.toString()),
+                        ),
+                      );
+                    }
+                  },
+                  child: const Text('Guardar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  int nextSubColumnPosition(Map<String, dynamic> parent) {
+    final children = childColumnsOf(parent['id']);
+
+    if (children.isEmpty) {
+      return ((parent['position'] ?? 0) * 100) + 1;
+    }
+
+    final positions = children
+        .map((e) => e['position'] ?? 0)
+        .cast<int>()
+        .toList()
+      ..sort();
+
+    return positions.last + 1;
+  }
+
+  Future<void> createSubColumn() async {
+    if (!isLeader) {
+      throw Exception('Sólo el líder puede crear subcolumnas');
+    }
+
+    final parent = selectedParentColumn;
+
+    if (parent == null) {
+      throw Exception('Seleccione una columna principal');
+    }
+
+    final name = subColumnNameController.text.trim();
+
+    if (name.isEmpty) {
+      throw Exception('Ingrese el nombre de la subcolumna');
+    }
+
+    final currentChildren = childColumnsOf(parent['id']);
+    final limit = maxSubColumnsForParent(parent['name']);
+
+    if (currentChildren.length >= limit) {
+      throw Exception('Ya se alcanzó el límite de subcolumnas');
+    }
+
+    await supabase.from('kanban_columnas').insert({
+      'proyecto_id': widget.project['id'],
+      'name': name,
+      'position': nextSubColumnPosition(parent),
+      'parent_column_id': parent['id'],
+      'is_default': false,
+      'status': true,
+    });
+
+    subColumnNameController.clear();
+    selectedParentColumn = null;
   }
 
   void subscribeRealtime() {
@@ -98,8 +441,7 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
     });
   }
 
-  List<Map<String, dynamic>> tasksByColumn(int columnId) =>
-      tasks.where((t) => t['column_id'] == columnId).toList();
+  List<Map<String, dynamic>> tasksByColumn(int columnId) => tasks.where((t) => t['column_id'] == columnId).toList();
 
   Map<String, dynamic>? getPendingColumn() {
     try {
@@ -140,10 +482,10 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
         content: SingleChildScrollView(
           child: Column(
             children: [
-              const SizedBox(height: 4),
               _dialogField('Título', taskTitleController, Icons.title_rounded),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               _dialogField('Descripción', taskDescriptionController, Icons.notes_rounded, maxLines: 3),
+              const SizedBox(height: 10),
             ],
           ),
         ),
@@ -251,12 +593,9 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
   }
 
   // ─── Colores de columna ───────────────────────────────────────────────────
-  Color _colBg(String name) =>
-      _colColors[name.toLowerCase()] ?? const Color(0xFFEDE7F6);
-  Color _colDot(String name) =>
-      _colDotColors[name.toLowerCase()] ?? const Color(0xFF6A1B9A);
-  Color _colText(String name) =>
-      _colTextColors[name.toLowerCase()] ?? const Color(0xFF4A148C);
+  Color _colBg(String name) => _colColors[name.toLowerCase()] ?? const Color(0xFFEDE7F6);
+  Color _colDot(String name) => _colDotColors[name.toLowerCase()] ?? const Color(0xFF6A1B9A);
+  Color _colText(String name) => _colTextColors[name.toLowerCase()] ?? const Color(0xFF4A148C);
 
   // ─── Columna estilo Notion ────────────────────────────────────────────────
   Widget buildColumn(Map<String, dynamic> column) {
@@ -265,6 +604,8 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
     final dot  = _colDot(column['name']);
     final text = _colText(column['name']);
     final isMobile = MediaQuery.of(context).size.width < 750;
+
+    final isChildColumn = column['parent_column_id'] != null;
 
     return DragTarget<Map<String, dynamic>>(
       onWillAccept: (task) => task != null && !isTaskLockedByOther(task),
@@ -283,8 +624,14 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
                     decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
                   ),
                   const SizedBox(width: 8),
-                  Text(column['name'],
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: text)),
+                  Text(
+                    isChildColumn ? '↳ ${column['name']}' : column['name'],
+                    style: TextStyle(
+                      fontSize: isChildColumn ? 12 : 13,
+                      fontWeight: FontWeight.w700,
+                      color: text,
+                    ),
+                  ),
                   const Spacer(),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
@@ -339,6 +686,7 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
         return AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           width: 300,
+          height: double.infinity,
           margin: const EdgeInsets.fromLTRB(8, 8, 8, 8),
           decoration: decoration,
           child: Column(
@@ -347,7 +695,7 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
               header,
               if (columnTasks.isEmpty) emptyState,
               if (columnTasks.isNotEmpty)
-                Flexible(
+                Expanded(
                   child: ListView(
                     shrinkWrap: true,
                     physics: const ClampingScrollPhysics(),
@@ -440,84 +788,104 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
       appBar: AppBar(
         backgroundColor: _primary,
         foregroundColor: Colors.white,
+        iconTheme: const IconThemeData(size: 20, color: Colors.white),
         elevation: 0,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(widget.project['title'],
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                overflow: TextOverflow.ellipsis),
-            Text('Mi rol: ${widget.myRole}',
-                style: const TextStyle(fontSize: 11, color: Colors.white70)),
+            Text(widget.project['title'], style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 3,),
+            Text('Mi rol: ${widget.myRole}', style: const TextStyle(fontSize: 10, color: Colors.white70)),
           ],
         ),
       ),
       body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                // ── Barra superior ───────────────────────────────────
-                Container(
-                  color: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  child: Row(
-                    children: [
-                      // Contador de tareas
-                      Text(
-                        '${tasks.length} actividades',
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+        ? const Center(child: CircularProgressIndicator())
+        : Column(
+          children: [
+            // ── Barra superior ───────────────────────────────────
+            Container(
+              color: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                alignment: WrapAlignment.spaceBetween,
+                children: [
+                  Text('${tasks.length} actividades', style: TextStyle(fontSize: 12, color: Colors.grey.shade500,),),
+                  activeUsersBar(),
+                  ElevatedButton.icon(
+                    onPressed: showCreateTaskDialog,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      const Spacer(),
-                      // Botón nueva actividad
-                      ElevatedButton.icon(
-                        onPressed: showCreateTaskDialog,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _primary,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          elevation: 0,
-                        ),
-                        icon: const Icon(Icons.add_rounded, size: 16, color: Colors.white,),
-                        label: const Text('Nueva actividad', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                      ),
-                    ],
+                      elevation: 0,
+                    ),
+                    icon: const Icon(Icons.add_rounded, size: 16, color: Colors.white),
+                    label: const Text('Nueva actividad', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),),
                   ),
-                ),
-                const Divider(height: 1, color: Color(0xFFE5E5E3)),
-                // ── Tablero ──────────────────────────────────────────
-                Expanded(
-                  child: isMobile
-                      // Móvil: columnas apiladas con scroll vertical
-                      ? ListView(
-                          padding: const EdgeInsets.all(8),
-                          children: columns.map(buildColumn).toList(),
-                        )
-                      // Desktop: columnas en fila, cada una con scroll propio
-                      : SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.all(12),
-                          child: SizedBox(
-                            // Alto fijo = pantalla - appBar - barraTop - divider
-                            height: MediaQuery.of(context).size.height - kToolbarHeight - 57,
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: columns.map(buildColumn).toList(),
-                            ),
-                          ),
-                        ),
-                ),
-              ],
-            ),
-    );
-  }
 
-  Color getColumnColor(String name) {
-    switch (name.toLowerCase()) {
-      case 'pendiente':  return Colors.orange;
-      case 'en proceso': return Colors.blue;
-      case 'terminado':  return Colors.green;
-      default:           return Colors.purple;
-    }
+                  if (isLeader)
+                    ElevatedButton.icon(
+                      onPressed: showCreateSubColumnDialog,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        elevation: 0,
+                      ),
+                      icon: const Icon(Icons.view_column_rounded, size: 16, color: Colors.white,),
+                      label: const Text('Subcolumna', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),),
+                    ),
+                ],
+              ),
+            ),
+            const Divider(height: 1, color: Color(0xFFE5E5E3)),
+            // ── Tablero ──────────────────────────────────────────
+            Expanded(
+              child: isMobile
+                  ? ListView(
+                padding: const EdgeInsets.all(8),
+                children: orderedColumns.map(buildColumn).toList(),
+              )
+                  : LayoutBuilder(
+                builder: (context, constraints) {
+                  const columnWidth = 300.0;
+                  const columnMargin = 16.0;
+
+                  final boardWidth = orderedColumns.length * (columnWidth + columnMargin);
+
+                  return Scrollbar(
+                    controller: horizontalBoardController,
+                    thumbVisibility: true,
+                    child: SingleChildScrollView(
+                      controller: horizontalBoardController,
+                      scrollDirection: Axis.horizontal,
+                      child: SizedBox(
+                        width: boardWidth < constraints.maxWidth
+                            ? constraints.maxWidth
+                            : boardWidth,
+                        height: constraints.maxHeight,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: orderedColumns.map(buildColumn).toList(),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+    );
   }
 }

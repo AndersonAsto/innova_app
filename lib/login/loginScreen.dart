@@ -185,7 +185,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                     )
                                   : const Text(
                                       'Iniciar Sesión',
-                                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                                      style: TextStyle(fontSize: 15),
                                     ),
                             ),
                           ),
