@@ -49,6 +49,7 @@ dependencies:
   path_provider: ^2.1.5
   open_filex: ^4.7.0
   supabase_flutter: ^2.14.2
+  file_picker: ^8.1.7
 
 dev_dependencies:
   flutter_test:

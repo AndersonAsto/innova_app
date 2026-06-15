@@ -1,4 +1,7 @@
+import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:innova/environments/environments.dart';
 import 'package:innova/login/authGate.dart';
 import 'package:innova/main.dart';
@@ -32,6 +35,8 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
   List<Map<String, dynamic>> activeUsers = [];
   RealtimeChannel? activeUsersChannel;
 
+  Timer? activeUserTimer;
+
   // ─── Paleta Notion-like ───────────────────────────────────────────────────
   static const Color _primary  = Color(0xFF1A3A6B);
   static const Color _bgPage   = Color(0xFFF7F7F5);   // fondo página Notion
@@ -63,6 +68,8 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
     loadActiveUsers();
     setActiveUser();
     subscribeActiveUsersRealtime();
+    setActiveUser();
+    startActiveUserHeartbeat();
   }
 
   @override
@@ -76,8 +83,11 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
     if (activeUsersChannel != null) {
       supabase.removeChannel(activeUsersChannel!);
     }
+    activeUserTimer?.cancel();
+    removeActiveUser();
     super.dispose();
   }
+
   Future<void> setActiveUser() async {
     await supabase.from('proyecto_usuarios_activos').upsert({
       'proyecto_id': widget.project['id'],
@@ -86,7 +96,30 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
     }, onConflict: 'proyecto_id,practicante_id');
   }
 
+  Future<void> removeActiveUser() async {
+    await supabase
+        .from('proyecto_usuarios_activos')
+        .delete()
+        .eq('proyecto_id', widget.project['id'])
+        .eq('practicante_id', SessionService.profile!['id']);
+  }
+
+  void startActiveUserHeartbeat() {
+    activeUserTimer?.cancel();
+
+    activeUserTimer = Timer.periodic(
+      const Duration(seconds: 25),
+          (_) async {
+        await setActiveUser();
+      },
+    );
+  }
+
   Future<void> loadActiveUsers() async {
+    final limit = DateTime.now()
+        .subtract(const Duration(seconds: 60))
+        .toIso8601String();
+
     final response = await supabase
         .from('proyecto_usuarios_activos')
         .select('''
@@ -97,7 +130,8 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
           fathers_surname
         )
       ''')
-        .eq('proyecto_id', widget.project['id']);
+        .eq('proyecto_id', widget.project['id'])
+        .gte('last_seen', limit);
 
     if (!mounted) return;
 
@@ -592,6 +626,44 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
     return lockedBy != null && lockedBy != myId;
   }
 
+  Map<String, dynamic>? activeUserById(int id) {
+    try {
+      return activeUsers.firstWhere(
+            (e) => e['practicante_id'] == id,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Color taskLockColor(Map<String, dynamic> task) {
+    final lockedBy = task['locked_by_practicante'];
+
+    if (lockedBy == null) {
+      return _border;
+    }
+
+    return userColor(lockedBy);
+  }
+
+  String taskLockedByName(Map<String, dynamic> task) {
+    final lockedBy = task['locked_by_practicante'];
+
+    if (lockedBy == null) {
+      return '';
+    }
+
+    final active = activeUserById(lockedBy);
+
+    if (active == null || active['practicantes'] == null) {
+      return 'Usuario moviendo';
+    }
+
+    final user = active['practicantes'];
+
+    return '${user['names']} ${user['fathers_surname']}';
+  }
+
   // ─── Colores de columna ───────────────────────────────────────────────────
   Color _colBg(String name) => _colColors[name.toLowerCase()] ?? const Color(0xFFEDE7F6);
   Color _colDot(String name) => _colDotColors[name.toLowerCase()] ?? const Color(0xFF6A1B9A);
@@ -713,6 +785,9 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
   // ─── Tarjeta estilo Notion ────────────────────────────────────────────────
   Widget buildTaskCard(Map<String, dynamic> task) {
     final locked = isTaskLockedByOther(task);
+    final lockedBy = task['locked_by_practicante'];
+    final lockColor = taskLockColor(task);
+    final lockName = taskLockedByName(task);
 
     final card = Container(
       margin: const EdgeInsets.fromLTRB(10, 8, 10, 0),
@@ -720,43 +795,119 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
       decoration: BoxDecoration(
         color: locked ? const Color(0xFFF5F5F5) : Colors.white,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _border),
-        boxShadow: locked
-            ? []
-            : [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6, offset: const Offset(0, 2))],
+        border: Border.all(
+          color: lockedBy != null ? lockColor : _border,
+          width: lockedBy != null ? 2 : 1,
+        ),
+        boxShadow: lockedBy != null
+            ? [
+          BoxShadow(
+            color: lockColor.withValues(alpha: 0.20),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ]
+            : [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          if (lockedBy != null) ...[
+            Row(
               children: [
-                Text(
-                  task['title'],
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: locked ? Colors.grey : const Color(0xFF1A1A1A),
+                Icon(
+                  Icons.lock_rounded,
+                  size: 12,
+                  color: lockColor,
+                ),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Text(
+                    locked
+                        ? 'Moviendo: $lockName'
+                        : 'Moviendo tú',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: lockColor,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-                if ((task['description'] ?? '').toString().isNotEmpty) ...[
-                  const SizedBox(height: 5),
-                  Text(
-                    task['description'],
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade500, height: 1.4),
-                  ),
-                ],
               ],
             ),
-          ),
-          const SizedBox(width: 8),
-          Icon(
-            locked ? Icons.lock_rounded : Icons.drag_indicator_rounded,
-            size: 16,
-            color: locked ? Colors.grey.shade400 : Colors.grey.shade300,
+            const SizedBox(height: 8),
+          ],
+
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      task['title'],
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: locked ? Colors.grey : const Color(0xFF1A1A1A),
+                      ),
+                    ),
+                    if ((task['description'] ?? '').toString().isNotEmpty) ...[
+                      const SizedBox(height: 5),
+                      Text(
+                        task['description'],
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey.shade500,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              PopupMenuButton<String>(
+                icon: Icon(
+                  locked ? Icons.lock_rounded : Icons.more_vert,
+                  size: 18,
+                  color: locked ? Colors.grey.shade400 : Colors.grey.shade500,
+                ),
+                enabled: !locked,
+                onSelected: (value) async {
+                  if (value == 'edit') {
+                    await showEditTaskDialog(task);
+                  }
+
+                  if (value == 'delete') {
+                    await deleteTask(task);
+                  }
+                },
+                itemBuilder: (_) {
+                  return const [
+                    PopupMenuItem(
+                      value: 'edit',
+                      child: Text('Editar'),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Text('Eliminar'),
+                    ),
+                  ];
+                },
+              ),
+            ],
           ),
         ],
       ),
@@ -766,15 +917,269 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
 
     return LongPressDraggable<Map<String, dynamic>>(
       data: task,
-      onDragStarted:     () async => await lockTask(task),
-      onDragEnd:         (_) async => await loadBoard(),
+      onDragStarted: () async => await lockTask(task),
+      onDragEnd: (_) async {
+        await unlockTask(task);
+        await loadBoard();
+      },
       onDraggableCanceled: (_, __) async => await unlockTask(task),
       feedback: Material(
         color: Colors.transparent,
-        child: SizedBox(width: 280, child: Opacity(opacity: 0.95, child: card)),
+        child: SizedBox(
+          width: 280,
+          child: Opacity(
+            opacity: 0.95,
+            child: card,
+          ),
+        ),
       ),
-      childWhenDragging: Opacity(opacity: 0.3, child: card),
+      childWhenDragging: Opacity(
+        opacity: 0.3,
+        child: card,
+      ),
       child: card,
+    );
+  }
+
+  Future<void> showEditTaskDialog(Map<String, dynamic> task) async {
+    taskTitleController.text = task['title'] ?? '';
+    taskDescriptionController.text = task['description'] ?? '';
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text(
+            'Editar actividad',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: _primary,
+            ),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              children: [
+                _dialogField(
+                  'Título',
+                  taskTitleController,
+                  Icons.title_rounded,
+                ),
+                const SizedBox(height: 10),
+                _dialogField(
+                  'Descripción',
+                  taskDescriptionController,
+                  Icons.notes_rounded,
+                  maxLines: 3,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _primary,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () async {
+                try {
+                  await updateTask(task['id']);
+
+                  if (!mounted) return;
+
+                  Navigator.pop(context);
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Actividad actualizada'),
+                    ),
+                  );
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(e.toString())),
+                  );
+                }
+              },
+              child: const Text('Guardar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  String generateInvitationCode() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    final random = Random.secure();
+
+    final code = List.generate(
+      8,
+          (_) => chars[random.nextInt(chars.length)],
+    ).join();
+
+    return 'INV-$code';
+  }
+
+  Future<void> generateInvitation() async {
+    if (!isLeader) {
+      throw Exception('Sólo el líder puede generar invitaciones');
+    }
+
+    final code = generateInvitationCode();
+
+    await supabase.from('invitaciones_proyecto').insert({
+      'proyecto_id': widget.project['id'],
+      'created_by_practicante': SessionService.profile!['id'],
+      'token': code,
+      'status': true,
+      'expires_at': DateTime.now()
+          .add(const Duration(days: 7))
+          .toIso8601String(),
+    });
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (_) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text(
+            'Código de invitación',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: _primary,
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Comparte este código con un practicante registrado para que pueda unirse al proyecto.',
+                style: TextStyle(fontSize: 12),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: _bgPage,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: _border),
+                ),
+                child: Center(
+                  child: Text(
+                    code,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.5,
+                      color: _primary,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cerrar'),
+            ),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _primary,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () async {
+                await Clipboard.setData(
+                  ClipboardData(text: code),
+                );
+
+                if (!mounted) return;
+
+                Navigator.pop(context);
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Código copiado'),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.copy, size: 16),
+              label: const Text('Copiar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> updateTask(int taskId) async {
+    final title = taskTitleController.text.trim();
+
+    if (title.isEmpty) {
+      throw Exception('El título es obligatorio');
+    }
+
+    await supabase.from('tareas').update({
+      'title': title,
+      'description': taskDescriptionController.text.trim(),
+      'updated_at': DateTime.now().toIso8601String(),
+    }).eq('id', taskId);
+  }
+
+  Future<void> deleteTask(Map<String, dynamic> task) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) {
+        return AlertDialog(
+          title: const Text(
+            'Eliminar actividad',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: const Text('¿Desea eliminar esta actividad?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Eliminar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
+
+    await supabase.from('tareas').update({
+      'status': false,
+      'updated_at': DateTime.now().toIso8601String(),
+    }).eq('id', task['id']);
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Actividad eliminada'),
+      ),
     );
   }
 
@@ -886,6 +1291,21 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
             ),
           ],
         ),
+      floatingActionButton: isLeader
+          ? FloatingActionButton.extended(
+        backgroundColor: _primary,
+        foregroundColor: Colors.white,
+        onPressed: () async {
+          try {
+            await generateInvitation();
+          } catch (e) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()),),);
+          }
+        },
+        icon: const Icon(Icons.person_add_alt_1_rounded),
+        label: const Text('Invitar'),
+      ) : null,
     );
   }
 }

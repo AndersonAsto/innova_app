@@ -1,9 +1,12 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:innova/environments/environments.dart';
 import 'package:innova/intern/projectKanbanScreen.dart';
 import 'package:innova/login/authGate.dart';
 import 'package:innova/main.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'dart:typed_data' as typed;
 
 class ProjectsInternScreen extends StatefulWidget {
   const ProjectsInternScreen({super.key});
@@ -16,6 +19,17 @@ class _ProjectsInternScreenState extends State<ProjectsInternScreen> {
   List<Map<String, dynamic>> projects = [];
   bool isLoading = true;
   RealtimeChannel? _projectsChannel;
+  TextEditingController documentSearchController = TextEditingController();
+  TextEditingController documentFileNameController = TextEditingController();
+  List<Map<String, dynamic>> projectDocuments = [];
+  bool isLoadingDocuments = false;
+  String documentSearch = '';
+  RealtimeChannel? _documentsChannel;
+  int? currentDocumentsProjectId;
+  StateSetter? documentsModalSetState;
+  final TextEditingController invitationCodeController = TextEditingController();
+  RealtimeChannel? _tasksChannel;
+  RealtimeChannel? _columnsChannel;
 
   static const Color _primary     = Color(0xFF1A3A6B);
   static const Color _accent      = Color(0xFF2EC4B6);
@@ -28,6 +42,7 @@ class _ProjectsInternScreenState extends State<ProjectsInternScreen> {
     super.initState();
     loadProjects();
     setupRealtimeSubscription();
+    setupBoardRealtimeSubscription();
   }
 
   @override
@@ -35,25 +50,708 @@ class _ProjectsInternScreenState extends State<ProjectsInternScreen> {
     if (_projectsChannel != null) {
       supabase.removeChannel(_projectsChannel!);
     }
+    if (_documentsChannel != null) {
+      supabase.removeChannel(_documentsChannel!);
+    }
+    documentsModalSetState = null;
+    invitationCodeController.dispose();
+    documentSearchController.dispose();
+    documentFileNameController.dispose();
+    if (_tasksChannel != null) {
+      supabase.removeChannel(_tasksChannel!);
+    }
+
+    if (_columnsChannel != null) {
+      supabase.removeChannel(_columnsChannel!);
+    }
     super.dispose();
+  }
+
+  void setupBoardRealtimeSubscription() {
+    _tasksChannel = supabase
+        .channel('projects_tasks_realtime')
+        .onPostgresChanges(
+      event: PostgresChangeEvent.all,
+      schema: 'public',
+      table: 'tareas',
+      callback: (_) async {
+        await loadProjects();
+      },
+    )
+        .subscribe();
+
+    _columnsChannel = supabase
+        .channel('projects_columns_realtime')
+        .onPostgresChanges(
+      event: PostgresChangeEvent.all,
+      schema: 'public',
+      table: 'kanban_columnas',
+      callback: (_) async {
+        await loadProjects();
+      },
+    )
+        .subscribe();
+  }
+
+  Future<void> joinProjectByInvitationCode() async {
+    final code = invitationCodeController.text.trim();
+
+    if (code.isEmpty) {
+      throw Exception('Ingrese el código de invitación');
+    }
+
+    final myId = SessionService.profile!['id'];
+
+    final invitation = await supabase
+        .from('invitaciones_proyecto')
+        .select()
+        .eq('token', code)
+        .eq('status', true)
+        .maybeSingle();
+
+    if (invitation == null) {
+      throw Exception('El código no existe o ya no está activo');
+    }
+
+    if (invitation['used_by_practicante'] != null) {
+      throw Exception('Este código ya fue usado');
+    }
+
+    final expiresAt = invitation['expires_at'];
+
+    if (expiresAt != null) {
+      final expiration = DateTime.parse(expiresAt);
+      if (DateTime.now().isAfter(expiration)) {
+        throw Exception('Este código ya expiró');
+      }
+    }
+
+    final projectId = invitation['proyecto_id'];
+
+    final existing = await supabase
+        .from('proyecto_participantes')
+        .select()
+        .eq('proyecto_id', projectId)
+        .eq('practicante_id', myId)
+        .maybeSingle();
+
+    if (existing != null) {
+      if (existing['role'] == 'Líder') {
+        throw Exception('Ya eres líder de este proyecto');
+      }
+
+      throw Exception('Ya perteneces a este proyecto');
+    }
+
+    await supabase.from('proyecto_participantes').insert({
+      'proyecto_id': projectId,
+      'practicante_id': myId,
+      'role': 'Integrante',
+      'status': true,
+    });
+
+    await supabase.from('invitaciones_proyecto').update({
+      'status': false,
+      'used_by_practicante': myId,
+      'used_at': DateTime.now().toIso8601String(),
+    }).eq('id', invitation['id']);
+
+    await loadProjects();
+  }
+
+  Future<void> showJoinProjectModal() async {
+    invitationCodeController.clear();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(24),
+        ),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(15),
+                decoration: BoxDecoration(
+                  color: _primary,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.group_add_rounded, color: Colors.white),
+                    SizedBox(width: 10),
+                    Text(
+                      'Unirse a proyecto',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              TextField(
+                controller: invitationCodeController,
+                textCapitalization: TextCapitalization.characters,
+                decoration: InputDecoration(
+                  labelText: 'Código de invitación',
+                  hintText: 'INV-XXXXXXXX',
+                  prefixIcon: const Icon(Icons.vpn_key_rounded),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  icon: const Icon(Icons.check_rounded, color: Colors.white),
+                  label: const Text('Unirme'),
+                  onPressed: () async {
+                    try {
+                      await joinProjectByInvitationCode();
+
+                      if (!mounted) return;
+
+                      Navigator.pop(context);
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Te uniste al proyecto correctamente'),
+                        ),
+                      );
+                    } catch (e) {
+                      if (!mounted) return;
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(e.toString()),
+                        ),
+                      );
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> loadProjectDocuments(int projectId) async {
+    setState(() {
+      isLoadingDocuments = true;
+    });
+
+    final response = await supabase
+        .from('documentos_proyecto')
+        .select('''
+        *,
+        practicantes(
+          id,
+          names,
+          fathers_surname
+        )
+      ''')
+        .eq('proyecto_id', projectId)
+        .eq('status', true)
+        .order('created_at', ascending: false);
+
+    if (!mounted) return;
+
+    setState(() {
+      projectDocuments = List<Map<String, dynamic>>.from(response);
+      isLoadingDocuments = false;
+    });
+  }
+
+  List<Map<String, dynamic>> filteredDocuments() {
+    final query = documentSearch.toLowerCase().trim();
+
+    if (query.isEmpty) {
+      return projectDocuments;
+    }
+
+    return projectDocuments.where((doc) {
+      final name = doc['file_name']?.toString().toLowerCase() ?? '';
+      return name.contains(query);
+    }).toList();
+  }
+
+  Color fileTypeColor(String type) {
+    final ext = type.toLowerCase();
+
+    if (ext.contains('pdf')) return Colors.red;
+    if (ext.contains('doc')) return Colors.blue;
+    if (ext.contains('xls')) return Colors.green;
+    if (ext.contains('ppt')) return Colors.orange;
+    if (ext.contains('image') ||
+        ext.contains('jpg') ||
+        ext.contains('jpeg') ||
+        ext.contains('png') ||
+        ext.contains('webp')) {
+      return Colors.purple;
+    }
+
+    return Colors.grey;
+  }
+
+  IconData fileTypeIcon(String type) {
+    final ext = type.toLowerCase();
+
+    if (ext.contains('pdf')) return Icons.picture_as_pdf;
+    if (ext.contains('doc')) return Icons.description;
+    if (ext.contains('xls')) return Icons.table_chart;
+    if (ext.contains('ppt')) return Icons.slideshow;
+    if (ext.contains('image') ||
+        ext.contains('jpg') ||
+        ext.contains('jpeg') ||
+        ext.contains('png') ||
+        ext.contains('webp')) {
+      return Icons.image;
+    }
+
+    return Icons.insert_drive_file;
+  }
+
+  String fileExtension(String fileName) {
+    if (!fileName.contains('.')) return 'file';
+    return fileName.split('.').last.toLowerCase();
+  }
+
+  Future<void> downloadDocument(String url) async {
+    final uri = Uri.parse(url);
+
+    if (!await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+    )) {
+      throw Exception('No se pudo abrir el archivo');
+    }
+  }
+
+  Future<void> uploadProjectDocument(Map<String, dynamic> project) async {
+    final result = await FilePicker.platform.pickFiles(
+      withData: true,
+      type: FileType.custom,
+      allowedExtensions: [
+        'pdf',
+        'doc',
+        'docx',
+        'xls',
+        'xlsx',
+        'ppt',
+        'pptx',
+        'jpg',
+        'jpeg',
+        'png',
+        'webp',
+      ],
+    );
+
+    if (result == null || result.files.isEmpty) return;
+
+    final file = result.files.first;
+    final typed.Uint8List? bytes = file.bytes;
+
+    if (bytes == null) {
+      throw Exception('No se pudo leer el archivo');
+    }
+
+    final originalName = file.name;
+    final ext = fileExtension(originalName);
+    final cleanName = originalName.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+
+    final storagePath = '${project['id']}/${DateTime.now().millisecondsSinceEpoch}_$cleanName';
+
+    await supabase.storage
+        .from('project-documents')
+        .uploadBinary(
+      storagePath,
+      bytes,
+      fileOptions: FileOptions(
+        contentType: file.extension == null ? null : 'application/$ext',
+        upsert: false,
+      ),
+    );
+
+    final publicUrl = supabase.storage
+        .from('project-documents')
+        .getPublicUrl(storagePath);
+
+    await supabase.from('documentos_proyecto').insert({
+      'proyecto_id': project['id'],
+      'uploaded_by_practicante': SessionService.profile!['id'],
+      'file_name': originalName,
+      'file_url': publicUrl,
+      'storage_path': storagePath,
+      'file_size_mb': ((file.size / 1024) / 1024).toStringAsFixed(2),
+      'file_type': ext,
+      'status': true,
+    });
+
+    await loadProjectDocuments(project['id']);
+  }
+
+  Future<void> deleteProjectDocument(Map<String, dynamic> doc) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) {
+        return AlertDialog(
+          title: const Text(
+            'Eliminar documento',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: Text(
+            '¿Desea eliminar definitivamente "${doc['file_name']}"?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Eliminar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
+
+    final storagePath = doc['storage_path'];
+
+    if (storagePath != null && storagePath.toString().isNotEmpty) {
+      await supabase.storage
+          .from('project-documents')
+          .remove([storagePath]);
+    }
+
+    await supabase
+        .from('documentos_proyecto')
+        .delete()
+        .eq('id', doc['id']);
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Documento eliminado correctamente'),
+      ),
+    );
+  }
+
+  Future<void> showProjectDocumentsModal({
+    required Map<String, dynamic> project,
+    required bool isLeader,
+  }) async {
+    documentSearchController.clear();
+    documentSearch = '';
+
+    await loadProjectDocuments(project['id']);
+    subscribeDocumentsRealtime(project['id']);
+
+    if (!mounted) return;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(24),
+        ),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+
+          builder: (context, setModalState) {
+            final docs = filteredDocuments();
+            documentsModalSetState = setModalState;
+            return SizedBox(
+              height: MediaQuery.of(context).size.height * 0.85,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 18,
+                  right: 18,
+                  bottom: MediaQuery.of(context).viewInsets.bottom + 18,
+                ),
+                child: Column(
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(15),
+                      decoration: BoxDecoration(
+                        color: _primary,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.folder_rounded,
+                            color: Colors.white,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Documentos - ${project['title']}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    TextField(
+                      controller: documentSearchController,
+                      decoration: InputDecoration(
+                        hintText: 'Buscar por nombre de archivo...',
+                        prefixIcon: const Icon(Icons.search),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onChanged: (value) {
+                        setModalState(() {
+                          documentSearch = value;
+                        });
+                      },
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    if (isLeader)
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            try {
+                              await uploadProjectDocument(project);
+                              setModalState(() {});
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Documento subido correctamente'),
+                                ),
+                              );
+                            } catch (e) {
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(e.toString()),
+                                ),
+                              );
+                            }
+                          },
+                          icon: const Icon(Icons.upload_file, color: Colors.white,),
+                          label: const Text('Subir documento'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _primary,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ),
+
+                    if (isLeader) const SizedBox(height: 12),
+
+                    Expanded(
+                      child: isLoadingDocuments
+                          ? const Center(child: CircularProgressIndicator())
+                          : docs.isEmpty
+                          ? const Center(
+                        child: Text('No hay documentos disponibles'),
+                      )
+                          : ListView.builder(
+                        itemCount: docs.length,
+                        itemBuilder: (_, index) {
+                          return buildDocumentCard(docs[index], isLeader);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget buildDocumentCard(Map<String, dynamic> doc, bool isLeader) {
+    final type = doc['file_type']?.toString() ?? '';
+    final color = fileTypeColor(type);
+    final uploader = doc['practicantes'];
+
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.only(bottom: 10),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: color.withValues(alpha: 0.15),
+          child: Icon(
+            fileTypeIcon(type),
+            color: color,
+          ),
+        ),
+        title: Text(
+          doc['file_name'] ?? '',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+          ),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${doc['file_size_mb']} MB · ${type.toUpperCase()}',
+              style: const TextStyle(fontSize: 11),
+            ),
+            if (uploader != null)
+              Text(
+                'Subido por ${uploader['names']} ${uploader['fathers_surname']}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Colors.grey.shade500,
+                ),
+              ),
+          ],
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: 'Descargar',
+              icon: const Icon(
+                Icons.download_rounded,
+                color: _primary,
+              ),
+              onPressed: () async {
+                try {
+                  await downloadDocument(doc['file_url']);
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(e.toString()),
+                    ),
+                  );
+                }
+              },
+            ),
+            if (isLeader)...[
+              IconButton(
+                tooltip: 'Eliminar',
+                icon: const Icon(
+                  Icons.delete_rounded,
+                  color: Colors.red,
+                ),
+                onPressed: () async {
+                  try {
+                    await deleteProjectDocument(doc);
+                    await loadProjectDocuments(doc['proyecto_id']);
+                  } catch (e) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(e.toString()),
+                      ),
+                    );
+                  }
+                },
+              ),
+            ]
+          ],
+        ),
+      ),
+    );
   }
 
   void setupRealtimeSubscription() {
     final internId = SessionService.profile!['id'];
 
     _projectsChannel = supabase
-        .channel('public:proyecto_participantes')
+        .channel('projects_intern_$internId')
         .onPostgresChanges(
-      event: PostgresChangeEvent.insert,
+      event: PostgresChangeEvent.all,
       schema: 'public',
       table: 'proyecto_participantes',
+      callback: (_) async {
+        await loadProjects();
+      },
+    )
+        .subscribe();
+  }
+
+  void subscribeDocumentsRealtime(int projectId) {
+    if (_documentsChannel != null) {
+      supabase.removeChannel(_documentsChannel!);
+    }
+
+    currentDocumentsProjectId = projectId;
+
+    _documentsChannel = supabase
+        .channel('documents_project_$projectId')
+        .onPostgresChanges(
+      event: PostgresChangeEvent.all,
+      schema: 'public',
+      table: 'documentos_proyecto',
       filter: PostgresChangeFilter(
         type: PostgresChangeFilterType.eq,
-        column: 'practicante_id',
-        value: internId,
+        column: 'proyecto_id',
+        value: projectId,
       ),
-      callback: (payload) {
-        loadProjects();
+      callback: (_) async {
+        await loadProjectDocuments(projectId);
+        documentsModalSetState?.call(() {});
       },
     )
         .subscribe();
@@ -147,12 +845,7 @@ class _ProjectsInternScreenState extends State<ProjectsInternScreen> {
     final hasImage = (project['img_url'] ?? '').toString().trim().isNotEmpty;
 
     return GestureDetector(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ProjectKanbanScreen(project: project, myRole: myRole),
-        ),
-      ),
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProjectKanbanScreen(project: project, myRole: myRole),),),
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
         child: Container(
@@ -194,7 +887,6 @@ class _ProjectsInternScreenState extends State<ProjectsInternScreen> {
                         ),
                       ),
                     ),
-                    // Badge estado arriba izquierda
                     Positioned(
                       top: 12, left: 12,
                       child: Container(
@@ -207,11 +899,9 @@ class _ProjectsInternScreenState extends State<ProjectsInternScreen> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Container(width: 6, height: 6,
-                                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle)),
+                            Container(width: 6, height: 6, decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle)),
                             const SizedBox(width: 5),
-                            Text(isActive ? 'Activo' : 'Inactivo',
-                                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                            Text(isActive ? 'Activo' : 'Inactivo', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                           ],
                         ),
                       ),
@@ -324,11 +1014,56 @@ class _ProjectsInternScreenState extends State<ProjectsInternScreen> {
                               ...leader.map((p) => participantAvatar(intern: p['practicantes'], color: _leaderColor, role: 'Líder')),
                               ...members.map((p) => participantAvatar(intern: p['practicantes'], color: _memberColor, role: 'Integrante')),
                               const Spacer(),
-                              Text('${participants.length} miembro${participants.length != 1 ? 's' : ''}',
-                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade400)),
+                              Text('${participants.length} miembro${participants.length != 1 ? 's' : ''}', style: TextStyle(fontSize: 11, color: Colors.grey.shade400)),
                             ],
                           );
                         },
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          const Spacer(),
+                          InkWell(
+                            borderRadius: BorderRadius.circular(20),
+                            onTap: () {
+                              showProjectDocumentsModal(
+                                project: project,
+                                isLeader: isLeader,
+                              );
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _primary.withValues(
+                                  alpha: 0.08,
+                                ),
+                                borderRadius:
+                                BorderRadius.circular(20),
+                              ),
+                              child: const Row(
+                                children: [
+                                  Icon(
+                                    Icons.folder_rounded,
+                                    size: 16,
+                                    color: _primary,
+                                  ),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    'Documentos',
+                                    style: TextStyle(
+                                      color: _primary,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -484,6 +1219,13 @@ class _ProjectsInternScreenState extends State<ProjectsInternScreen> {
               ),
             ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: _primary,
+        foregroundColor: Colors.white,
+        onPressed: showJoinProjectModal,
+        icon: const Icon(Icons.group_add_rounded, color: Colors.white),
+        label: const Text('Unirme'),
       ),
     );
   }
