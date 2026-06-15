@@ -178,28 +178,57 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
   Widget activeUsersBar() {
     if (activeUsers.isEmpty) return const SizedBox();
 
-    return Wrap(
-      spacing: 6,
-      children: activeUsers.map((item) {
-        final user = item['practicantes'];
-        final id = user['id'];
+    final visibleUsers = activeUsers.take(5).toList();
+    final extraCount = activeUsers.length - visibleUsers.length;
 
-        return CircleAvatar(
-          radius: 14,
-          backgroundColor: userColor(id),
-          child: Text(
-            initials(user),
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
+    return Container(
+      constraints: const BoxConstraints(
+        maxWidth: 180,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ...visibleUsers.map((item) {
+            final user = item['practicantes'];
+            final id = user['id'];
+
+            return Container(
+              margin: const EdgeInsets.only(right: 4),
+              child: Tooltip(
+                message: '${user['names']} ${user['fathers_surname']}',
+                child: CircleAvatar(
+                  radius: 14,
+                  backgroundColor: userColor(id),
+                  child: Text(
+                    initials(user),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }),
+
+          if (extraCount > 0)
+            CircleAvatar(
+              radius: 14,
+              backgroundColor: Colors.grey.shade600,
+              child: Text(
+                '+$extraCount',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
-          ),
-        );
-      }).toList(),
+        ],
+      ),
     );
   }
-
 
   bool get isLeader => widget.myRole == 'Líder';
 
