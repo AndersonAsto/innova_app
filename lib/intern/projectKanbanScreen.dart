@@ -231,6 +231,9 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
   }
 
   bool get isLeader => widget.myRole == 'Líder';
+ 
+  // ─── Solo visualización para Gestor/Observador ───────────────────────────
+  bool get isReadOnly => widget.myRole == 'Gestor' || widget.myRole == 'Observador';
 
   List<Map<String, dynamic>> get baseColumns {
     return columns
@@ -709,8 +712,8 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
     final isChildColumn = column['parent_column_id'] != null;
 
     return DragTarget<Map<String, dynamic>>(
-      onWillAccept: (task) => task != null && !isTaskLockedByOther(task),
-      onAccept:     (task) async => await moveTaskToColumn(task, column['id']),
+      onWillAccept: (task) => !isReadOnly && task != null && !isTaskLockedByOther(task),
+      onAccept:     (task) async { if (!isReadOnly) await moveTaskToColumn(task, column['id']); },
       builder: (context, candidateData, _) {
         final isDragOver = candidateData.isNotEmpty;
 
@@ -913,7 +916,7 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
                   size: 18,
                   color: locked ? Colors.grey.shade400 : Colors.grey.shade500,
                 ),
-                enabled: !locked,
+                enabled: !locked && !isReadOnly,
                 onSelected: (value) async {
                   if (value == 'edit') {
                     await showEditTaskDialog(task);
@@ -943,6 +946,9 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
     );
 
     if (locked) return card;
+
+    // Gestor/Observador: solo visualización, sin arrastrar
+    if (isReadOnly) return card;
 
     return LongPressDraggable<Map<String, dynamic>>(
       data: task,
@@ -1232,6 +1238,27 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
             Text('Mi rol: ${widget.myRole}', style: const TextStyle(fontSize: 10, color: Colors.white70)),
           ],
         ),
+        actions: isReadOnly
+            ? [
+                Container(
+                  margin: const EdgeInsets.only(right: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.white38),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.visibility_rounded, size: 13, color: Colors.white70),
+                      SizedBox(width: 5),
+                      Text('Solo lectura', style: TextStyle(fontSize: 11, color: Colors.white70)),
+                    ],
+                  ),
+                ),
+              ]
+            : null,
       ),
       body: isLoading
         ? const Center(child: CircularProgressIndicator())
@@ -1249,6 +1276,7 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
                 children: [
                   Text('${tasks.length} actividades', style: TextStyle(fontSize: 12, color: Colors.grey.shade500,),),
                   activeUsersBar(),
+                  if (!isReadOnly)
                   ElevatedButton.icon(
                     onPressed: showCreateTaskDialog,
                     style: ElevatedButton.styleFrom(
