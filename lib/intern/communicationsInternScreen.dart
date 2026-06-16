@@ -221,6 +221,10 @@ class _CommunicationsInternScreenState extends State<CommunicationsInternScreen>
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (context) {
         return Padding(
           padding: EdgeInsets.only(
@@ -236,44 +240,80 @@ class _CommunicationsInternScreenState extends State<CommunicationsInternScreen>
               children: [
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(15),
+                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 18),
                   decoration: BoxDecoration(
-                    color: appColors[0],
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Text(
-                    'Detalle del comunicado',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
+                    gradient: LinearGradient(
+                      colors: [appColors[0], appColors[0].withOpacity(0.75)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: appColors[0].withOpacity(0.25),
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.18),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.campaign_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Detalle del comunicado',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 20),
                 infoTile(
+                  Icons.folder_outlined,
                   'Proyecto',
                   project?['title'] ?? 'Proyecto no disponible',
                 ),
                 infoTile(
+                  Icons.title_rounded,
                   'Título',
                   announcement?['title'],
                 ),
                 infoTile(
+                  Icons.notes_rounded,
                   'Mensaje',
                   announcement?['message_text'],
                 ),
                 if (announcement?['meeting_url'] != null && announcement!['meeting_url'].toString().isNotEmpty)
                   infoTile(
+                    Icons.videocam_outlined,
                     'Enlace de reunión',
                     announcement?['meeting_url'],
                   ),
                 if (announcement?['video_url'] != null && announcement!['video_url'].toString().isNotEmpty)
                   infoTile(
+                    Icons.play_circle_outline,
                     'Video',
                     announcement?['video_url'],
                   ),
                 infoTile(
+                  Icons.schedule_rounded,
                   'Fecha',
                   announcement?['created_at'],
                 ),
@@ -281,9 +321,21 @@ class _CommunicationsInternScreenState extends State<CommunicationsInternScreen>
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: appColors[0],
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
                     onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close),
-                    label: const Text('Cerrar'),
+                    icon: const Icon(Icons.close_rounded),
+                    label: const Text(
+                      'Cerrar',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
                   ),
                 ),
               ],
@@ -319,6 +371,10 @@ class _CommunicationsInternScreenState extends State<CommunicationsInternScreen>
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (modalContext) {
         return StatefulBuilder(
           builder: (context, setModalState) {
@@ -348,107 +404,193 @@ class _CommunicationsInternScreenState extends State<CommunicationsInternScreen>
                   children: [
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.all(15),
+                      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 18),
                       decoration: BoxDecoration(
-                        color: appColors[0],
+                        gradient: LinearGradient(
+                          colors: [appColors[0], appColors[0].withOpacity(0.75)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
                         borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(15),
+                          top: Radius.circular(20),
                         ),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Row(
                         children: [
-                          Text(
-                            project?['title'] ?? 'Proyecto',
-                            style: const TextStyle(
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.18),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.chat_bubble_outline_rounded,
                               color: Colors.white,
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
+                              size: 18,
                             ),
                           ),
-                          Text(
-                            'Gestor: ${manager?['names'] ?? ''} ${manager?['fathers_surname'] ?? ''}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  project?['title'] ?? 'Proyecto',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Gestor: ${manager?['names'] ?? ''} ${manager?['fathers_surname'] ?? ''}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
                     ),
                     Expanded(
-                      child: loadingMessages
-                          ? const Center(child: CircularProgressIndicator())
-                          : messages.isEmpty
-                          ? const Center(
-                        child: Text('Aún no hay mensajes'),
-                      )
-                          : ListView.builder(
-                        padding: const EdgeInsets.all(12),
-                        itemCount: messages.length,
-                        itemBuilder: (_, index) {
-                          final message = messages[index];
-                          final isMe =
-                              message['sender_type'] == 'Lider';
-                          final createdAt = DateTime.parse(message['created_at']).toLocal();
-                          final formattedDate = "${createdAt.year}-${createdAt.month.toString().padLeft(2, '0')}-${createdAt.day.toString().padLeft(2, '0')} ${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}";
-                          return Align(
-                            alignment: isMe
-                                ? Alignment.centerRight
-                                : Alignment.centerLeft,
-                            child: Container(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              padding: const EdgeInsets.all(10),
-                              constraints: const BoxConstraints(
-                                maxWidth: 320,
+                      child: Container(
+                        color: const Color(0xFFF5F6FA),
+                        child: loadingMessages
+                            ? const Center(child: CircularProgressIndicator())
+                            : messages.isEmpty
+                            ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.forum_outlined,
+                                size: 40,
+                                color: Colors.grey.shade400,
                               ),
-                              decoration: BoxDecoration(
-                                color: isMe
-                                    ? appColors[0]
-                                    : Colors.grey.shade300,
-                                borderRadius: BorderRadius.circular(12),
+                              const SizedBox(height: 10),
+                              Text(
+                                'Aún no hay mensajes',
+                                style: TextStyle(color: Colors.grey.shade600),
                               ),
-                              child: Column(
-                                crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                                children: [
-                                  Text(message['message_text'] ?? '', style: TextStyle(color: isMe ? Colors.white : Colors.black),),
-                                  const SizedBox(height: 4),
-                                  Text(formattedDate, style: TextStyle(color: isMe ? Colors.white70 : Colors.black54, fontSize: 8,),
+                            ],
+                          ),
+                        )
+                            : ListView.builder(
+                          padding: const EdgeInsets.all(12),
+                          itemCount: messages.length,
+                          itemBuilder: (_, index) {
+                            final message = messages[index];
+                            final isMe =
+                                message['sender_type'] == 'Lider';
+                            final createdAt = DateTime.parse(message['created_at']).toLocal();
+                            final formattedDate = "${createdAt.year}-${createdAt.month.toString().padLeft(2, '0')}-${createdAt.day.toString().padLeft(2, '0')} ${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}";
+                            return Align(
+                              alignment: isMe
+                                  ? Alignment.centerRight
+                                  : Alignment.centerLeft,
+                              child: Container(
+                                margin: const EdgeInsets.only(bottom: 10),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 10,
+                                ),
+                                constraints: const BoxConstraints(
+                                  maxWidth: 320,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isMe
+                                      ? appColors[0]
+                                      : Colors.white,
+                                  borderRadius: BorderRadius.only(
+                                    topLeft: const Radius.circular(14),
+                                    topRight: const Radius.circular(14),
+                                    bottomLeft: Radius.circular(isMe ? 14 : 4),
+                                    bottomRight: Radius.circular(isMe ? 4 : 14),
                                   ),
-                                ],
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.06),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                                  children: [
+                                    Text(message['message_text'] ?? '', style: TextStyle(color: isMe ? Colors.white : Colors.black87, fontSize: 13.5,),),
+                                    const SizedBox(height: 4),
+                                    Text(formattedDate, style: TextStyle(color: isMe ? Colors.white70 : Colors.black45, fontSize: 8,),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                          );
-                        },
+                            );
+                          },
+                        ),
                       ),
                     ),
                     SafeArea(
-                      child: Padding(
-                        padding: const EdgeInsets.all(10),
+                      child: Container(
+                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.05),
+                              blurRadius: 8,
+                              offset: const Offset(0, -2),
+                            ),
+                          ],
+                        ),
                         child: Row(
                           children: [
                             Expanded(
                               child: TextField(
                                 controller: chatMessageController,
-                                decoration: const InputDecoration(
+                                decoration: InputDecoration(
                                   hintText: 'Escribir mensaje...',
-                                  border: OutlineInputBorder(),
+                                  filled: true,
+                                  fillColor: const Color(0xFFF5F6FA),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 12,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(24),
+                                    borderSide: BorderSide.none,
+                                  ),
                                 ),
                               ),
                             ),
                             const SizedBox(width: 8),
-                            IconButton(
-                              onPressed: () async {
-                                await sendMessage(
-                                  conversationId: conversation['id'],
-                                  managerId: conversation['manager_id'],
-                                );
-
-                                await refreshMessages(setModalState);
-                              },
-                              icon: Icon(
-                                Icons.send,
+                            Container(
+                              decoration: BoxDecoration(
                                 color: appColors[0],
+                                shape: BoxShape.circle,
+                              ),
+                              child: IconButton(
+                                onPressed: () async {
+                                  await sendMessage(
+                                    conversationId: conversation['id'],
+                                    managerId: conversation['manager_id'],
+                                  );
+
+                                  await refreshMessages(setModalState);
+                                },
+                                icon: const Icon(
+                                  Icons.send_rounded,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
                               ),
                             ),
                           ],
@@ -475,54 +617,104 @@ class _CommunicationsInternScreenState extends State<CommunicationsInternScreen>
     final announcement = notification['anuncios_proyecto'];
     final project = announcement?['proyecto'];
 
-    return Card(
-      elevation: 2,
-      margin: const EdgeInsets.only(bottom: 10),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: appColors[0],
-          child: const Icon(
-            Icons.campaign,
-            color: Colors.white,
-            size: 18,
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            showAnnouncementDetails(notification);
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [appColors[0], appColors[0].withOpacity(0.7)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.campaign_rounded,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        announcement?['title'] ?? '',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: appColors[0],
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: appColors[0].withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          project?['title'] ?? 'Proyecto no disponible',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 10.5,
+                            color: appColors[0],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        announcement?['message_text'] ?? '',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 14,
+                  color: Colors.grey.shade400,
+                ),
+              ],
+            ),
           ),
         ),
-        title: Text(
-          announcement?['title'] ?? '',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: appColors[0],
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              project?['title'] ?? 'Proyecto no disponible',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 11,
-              ),
-            ),
-            Text(
-              announcement?['message_text'] ?? '',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
-        trailing: const Icon(
-          Icons.arrow_forward_ios,
-          size: 15,
-          color: Colors.black,
-        ),
-        onTap: () {
-          showAnnouncementDetails(notification);
-        },
       ),
     );
   }
@@ -531,48 +723,106 @@ class _CommunicationsInternScreenState extends State<CommunicationsInternScreen>
     final project = conversation['proyecto'];
     final manager = conversation['administradores_gestores'];
 
-    return Card(
-      elevation: 2,
-      margin: const EdgeInsets.only(bottom: 10),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: appColors[0],
-          child: const Icon(
-            Icons.chat,
-            color: Colors.white,
-            size: 18,
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () async {
+            await showChatModal(conversation);
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [appColors[0], appColors[0].withOpacity(0.7)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.chat_bubble_outline_rounded,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        project?['title'] ?? 'Proyecto',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: appColors[0],
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Gestor: ${manager?['names'] ?? ''} ${manager?['fathers_surname'] ?? ''}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 14,
+                  color: Colors.grey.shade400,
+                ),
+              ],
+            ),
           ),
         ),
-        title: Text(
-          project?['title'] ?? 'Proyecto',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: appColors[0],
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        subtitle: Text(
-          'Gestor: ${manager?['names'] ?? ''} ${manager?['fathers_surname'] ?? ''}',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        trailing: const Icon(
-          Icons.arrow_forward_ios,
-          size: 15,
-          color: Colors.black,
-        ),
-        onTap: () async {
-          await showChatModal(conversation);
-        },
       ),
     );
   }
 
   Widget buildAnnouncementsTab() {
     if (announcements.isEmpty) {
-      return const Center(
-        child: Text('No tienes comunicados por ahora'),
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.campaign_outlined,
+              size: 48,
+              color: Colors.grey.shade400,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'No tienes comunicados por ahora',
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+          ],
+        ),
       );
     }
 
@@ -584,24 +834,48 @@ class _CommunicationsInternScreenState extends State<CommunicationsInternScreen>
 
   Widget buildChatsTab() {
     if (!isLeaderUser) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(25),
-          child: Text(
-            'No eres líder de ningún proyecto. Sólo puedes visualizar comunicados.',
-            textAlign: TextAlign.center,
+          padding: const EdgeInsets.all(25),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.lock_outline_rounded,
+                size: 48,
+                color: Colors.grey.shade400,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'No eres líder de ningún proyecto. Sólo puedes visualizar comunicados.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey.shade600),
+              ),
+            ],
           ),
         ),
       );
     }
 
     if (leaderConversations.isEmpty) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(25),
-          child: Text(
-            'Aún no tienes conversaciones activas con gestores.',
-            textAlign: TextAlign.center,
+          padding: const EdgeInsets.all(25),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.chat_bubble_outline_rounded,
+                size: 48,
+                color: Colors.grey.shade400,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Aún no tienes conversaciones activas con gestores.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey.shade600),
+              ),
+            ],
           ),
         ),
       );
@@ -613,25 +887,40 @@ class _CommunicationsInternScreenState extends State<CommunicationsInternScreen>
     );
   }
 
-  Widget infoTile(String title, dynamic value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
+  Widget infoTile(IconData icon, String title, dynamic value) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F6FA),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Colors.grey,
-              fontSize: 12,
-            ),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            value?.toString() ?? '',
-            style: const TextStyle(
-              fontSize: 13,
+          Icon(icon, size: 16, color: Colors.grey.shade500),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey,
+                    fontSize: 11,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  value?.toString() ?? '',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -692,9 +981,11 @@ class _CommunicationsInternScreenState extends State<CommunicationsInternScreen>
     return DefaultTabController(
       length: tabs.length,
       child: Scaffold(
+        backgroundColor: const Color(0xFFF5F6FA),
         appBar: AppBar(
           backgroundColor: appColors[0],
           automaticallyImplyLeading: false,
+          elevation: 0,
           title: const Text(
             'Comunicados',
             style: TextStyle(color: Colors.white, fontSize: 15),
@@ -702,6 +993,8 @@ class _CommunicationsInternScreenState extends State<CommunicationsInternScreen>
           bottom: TabBar(
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white70,
+            indicatorColor: Colors.white,
+            indicatorWeight: 3,
             tabs: tabs,
           ),
         ),
