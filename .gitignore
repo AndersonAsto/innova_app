@@ -12,7 +12,7 @@
 .swiftpm/
 migrate_working_dir/
 api/
-
+sonar-project.properties
 # IntelliJ related
 *.iml
 *.ipr
