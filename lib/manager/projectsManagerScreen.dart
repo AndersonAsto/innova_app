@@ -4,6 +4,7 @@ import 'package:innova/environments/custom.widgets.dart';
 import 'package:innova/environments/environments.dart';
 import 'package:innova/main.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:innova/intern/projectKanbanScreen.dart'; // ajusta la ruta
 
 class ProjectsManagerScreen extends StatefulWidget {
   const ProjectsManagerScreen({super.key});
@@ -591,6 +592,31 @@ class _ProjectsManagerScreenState extends State<ProjectsManagerScreen> {
       ),
     );
   }
+Future<String> _getMyRole(int projectId) async {
+  try {
+    final myId = supabase.auth.currentUser?.id;
+    if (myId == null) return 'Observador';
+
+    final practitioner = await supabase
+        .from('practicantes')
+        .select('id')
+        .eq('user_id', myId)
+        .maybeSingle();
+
+    if (practitioner == null) return 'Observador';
+
+    final participant = await supabase
+        .from('proyecto_participantes')
+        .select('role')
+        .eq('proyecto_id', projectId)
+        .eq('practicante_id', practitioner['id'])
+        .maybeSingle();
+
+    return participant?['role'] ?? 'Observador';
+  } catch (_) {
+    return 'Observador';
+  }
+}
 
   // ─── Card estilo Netflix + dashboard ──────────────────────────────────────
   Widget buildProjectsCard(Map<String, dynamic> project) {
@@ -901,6 +927,26 @@ class _ProjectsManagerScreenState extends State<ProjectsManagerScreen> {
                     ),
                     const SizedBox(height: 24),
                     // ── Botones de acción ────────────────────────────
+                    _actionButton(
+  icon: Icons.view_kanban_rounded,
+  label: 'Ver Tablero Kanban',
+  color: _accent,
+  onTap: () async {
+    Navigator.pop(context);
+    final role = await _getMyRole(project['id']);
+    if (!mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ProjectKanbanScreen(
+          project: project,
+          myRole: role,
+        ),
+      ),
+    );
+  },
+),
+const SizedBox(height: 10),
                     _actionButton(
                       icon: Icons.group_add_rounded,
                       label: 'Agregar Integrantes',
