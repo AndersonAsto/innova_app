@@ -195,14 +195,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
                     const SizedBox(height: 20),
                     // ── Link solicitar cuenta ──────────────────────────
-                    TextButton(
+                    /*TextButton(
                       onPressed: () {},
                       child: Text(
                         '¿No tienes cuenta? Solicitar acceso',
                         style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 12),
                         textAlign: TextAlign.center,
                       ),
-                    ),
+                    ),*/
                   ],
                 ),
               ),

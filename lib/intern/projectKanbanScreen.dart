@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:innova/environments/environments.dart';
 import 'package:innova/login/authGate.dart';
 import 'package:innova/main.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -10,11 +9,13 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class ProjectKanbanScreen extends StatefulWidget {
   final Map<String, dynamic> project;
   final String myRole;
+  final bool readOnly;
 
   const ProjectKanbanScreen({
     super.key,
     required this.project,
     required this.myRole,
+    this.readOnly = false,
   });
 
   @override
@@ -22,14 +23,18 @@ class ProjectKanbanScreen extends StatefulWidget {
 }
 
 class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
+  bool get canEditBoard => !isReadOnly;
+  bool get isLeader => widget.myRole == 'Líder' && canEditBoard;
+
   RealtimeChannel? channel;
   List<Map<String, dynamic>> columns = [];
-  List<Map<String, dynamic>> tasks   = [];
+  List<Map<String, dynamic>> tasks = [];
   bool isLoading = true;
   final TextEditingController subColumnNameController = TextEditingController();
   Map<String, dynamic>? selectedParentColumn;
   final TextEditingController taskTitleController = TextEditingController();
-  final TextEditingController taskDescriptionController = TextEditingController();
+  final TextEditingController taskDescriptionController =
+      TextEditingController();
   final ScrollController horizontalBoardController = ScrollController();
   final ScrollController verticalBoardController = ScrollController();
   List<Map<String, dynamic>> activeUsers = [];
@@ -38,26 +43,26 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
   Timer? activeUserTimer;
 
   // ─── Paleta Notion-like ───────────────────────────────────────────────────
-  static const Color _primary  = Color(0xFF1A3A6B);
-  static const Color _bgPage   = Color(0xFFF7F7F5);   // fondo página Notion
-  static const Color _bgColumn = Color(0xFFF0F0EE);   // fondo columna
-  static const Color _border   = Color(0xFFE5E5E3);
+  static const Color _primary = Color(0xFF1A3A6B);
+  static const Color _bgPage = Color(0xFFF7F7F5); // fondo página Notion
+  static const Color _bgColumn = Color(0xFFF0F0EE); // fondo columna
+  static const Color _border = Color(0xFFE5E5E3);
 
   // Colores de estado — pasteles suaves
   static const Map<String, Color> _colColors = {
-    'pendiente':  Color(0xFFFFF3CD),
+    'pendiente': Color(0xFFFFF3CD),
     'en proceso': Color(0xFFD6EAF8),
-    'terminado':  Color(0xFFD5F5E3),
+    'terminado': Color(0xFFD5F5E3),
   };
   static const Map<String, Color> _colDotColors = {
-    'pendiente':  Color(0xFFE59D00),
+    'pendiente': Color(0xFFE59D00),
     'en proceso': Color(0xFF2980B9),
-    'terminado':  Color(0xFF27AE60),
+    'terminado': Color(0xFF27AE60),
   };
   static const Map<String, Color> _colTextColors = {
-    'pendiente':  Color(0xFF7A5800),
+    'pendiente': Color(0xFF7A5800),
     'en proceso': Color(0xFF1A5276),
-    'terminado':  Color(0xFF1A6636),
+    'terminado': Color(0xFF1A6636),
   };
 
   @override
@@ -65,11 +70,12 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
     super.initState();
     loadBoard();
     subscribeRealtime();
-    loadActiveUsers();
-    setActiveUser();
-    subscribeActiveUsersRealtime();
-    setActiveUser();
-    startActiveUserHeartbeat();
+    if (canEditBoard) {
+      loadActiveUsers();
+      subscribeActiveUsersRealtime();
+      setActiveUser();
+      startActiveUserHeartbeat();
+    }
   }
 
   @override
@@ -83,8 +89,10 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
     if (activeUsersChannel != null) {
       supabase.removeChannel(activeUsersChannel!);
     }
-    activeUserTimer?.cancel();
-    removeActiveUser();
+    if (canEditBoard) {
+      activeUserTimer?.cancel();
+      removeActiveUser();
+    }
     super.dispose();
   }
 
@@ -109,29 +117,23 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
 
     activeUserTimer = Timer.periodic(
       const Duration(seconds: 25),
-          (_) async {
+      (_) async {
         await setActiveUser();
       },
     );
   }
 
   Future<void> loadActiveUsers() async {
-    final limit = DateTime.now()
-        .subtract(const Duration(seconds: 60))
-        .toIso8601String();
+    final limit = DateTime.now().subtract(const Duration(seconds: 60)).toIso8601String();
 
-    final response = await supabase
-        .from('proyecto_usuarios_activos')
-        .select('''
+    final response = await supabase.from('proyecto_usuarios_activos').select('''
         *,
         practicantes(
           id,
           names,
           fathers_surname
         )
-      ''')
-        .eq('proyecto_id', widget.project['id'])
-        .gte('last_seen', limit);
+      ''').eq('proyecto_id', widget.project['id']).gte('last_seen', limit);
 
     if (!mounted) return;
 
@@ -144,13 +146,13 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
     activeUsersChannel = supabase
         .channel('active_users_${widget.project['id']}')
         .onPostgresChanges(
-      event: PostgresChangeEvent.all,
-      schema: 'public',
-      table: 'proyecto_usuarios_activos',
-      callback: (_) async {
-        await loadActiveUsers();
-      },
-    )
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'proyecto_usuarios_activos',
+          callback: (_) async {
+            await loadActiveUsers();
+          },
+        )
         .subscribe();
   }
 
@@ -211,7 +213,6 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
               ),
             );
           }),
-
           if (extraCount > 0)
             CircleAvatar(
               radius: 14,
@@ -230,21 +231,19 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
     );
   }
 
-  bool get isLeader => widget.myRole == 'Líder';
- 
   // ─── Solo visualización para Gestor/Observador ───────────────────────────
-  bool get isReadOnly => widget.myRole == 'Gestor' || widget.myRole == 'Observador';
+  bool get isReadOnly =>
+      widget.readOnly ||
+          widget.myRole == 'Supervisor' ||
+          widget.myRole == 'Gestor' ||
+          widget.myRole == 'Observador';
 
   List<Map<String, dynamic>> get baseColumns {
-    return columns
-        .where((c) => c['parent_column_id'] == null)
-        .toList();
+    return columns.where((c) => c['parent_column_id'] == null).toList();
   }
 
   List<Map<String, dynamic>> childColumnsOf(int parentId) {
-    return columns
-        .where((c) => c['parent_column_id'] == parentId)
-        .toList()
+    return columns.where((c) => c['parent_column_id'] == parentId).toList()
       ..sort((a, b) => (a['position'] ?? 0).compareTo(b['position'] ?? 0));
   }
 
@@ -265,7 +264,7 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
   Map<String, dynamic>? findBaseColumnByName(String name) {
     try {
       return baseColumns.firstWhere(
-            (c) => c['name'].toString().toLowerCase() == name.toLowerCase(),
+        (c) => c['name'].toString().toLowerCase() == name.toLowerCase(),
       );
     } catch (_) {
       return null;
@@ -274,10 +273,8 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
 
   int maxSubColumnsForParent(String parentName) {
     final name = parentName.toLowerCase();
-
     if (name == 'en proceso') return 2;
     if (name == 'terminado') return 1;
-
     return 0;
   }
 
@@ -329,31 +326,166 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
               ),
-              title: const Text(
-                'Nueva subcolumna',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: _primary,
-                ),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                        color: _primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8)),
+                    child:
+                    const Icon(Icons.view_column_outlined, color: _primary, size: 18),
+                  ),
+                  const SizedBox(width: 10),
+                  const Text(
+                    'Agregar Subcolumna',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: _primary,
+                    ),
+                  ),
+                ],
               ),
               content: SingleChildScrollView(
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: _primary.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: _primary.withValues(alpha: 0.12),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: _primary.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(
+                              Icons.account_tree_rounded,
+                              size: 18,
+                              color: _primary,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          const Expanded(
+                            child: Text(
+                              'La subcolumna se insertará debajo de una columna principal permitida.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF4A5568),
+                                height: 1.3,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    const Text(
+                      'Columna principal',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF2D3748),
+                      ),
+                    ),
+
+                    const SizedBox(height: 8),
+
                     DropdownButtonFormField<Map<String, dynamic>>(
                       value: selectedParentColumn,
-                      decoration: const InputDecoration(
-                        labelText: 'Columna principal',
-                        border: OutlineInputBorder(),
+                      isExpanded: true,
+                      dropdownColor: Colors.white,
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: _bgPage,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(
+                            color: _border,
+                          ),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(
+                            color: _border,
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(
+                            color: _primary,
+                            width: 1.4,
+                          ),
+                        ),
+                      ),
+                      hint: const Text(
+                        'Seleccione una columna',
+                        style: TextStyle(fontSize: 12),
                       ),
                       items: parents.map((parent) {
                         final current = childColumnsOf(parent['id']).length;
                         final max = maxSubColumnsForParent(parent['name']);
+                        final parentName = parent['name'].toString();
+                        final color = _colDot(parentName);
 
                         return DropdownMenuItem<Map<String, dynamic>>(
                           value: parent,
-                          child: Text(
-                            '${parent['name']} ($current/$max)',
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 9,
+                                height: 9,
+                                decoration: BoxDecoration(
+                                  color: color,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  parentName,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: color.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  '$current/$max',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: color,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         );
                       }).toList(),
@@ -363,18 +495,58 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
                         });
                       },
                     ),
-                    const SizedBox(height: 12),
-                    _dialogField(
+
+                    const SizedBox(height: 14),
+
+                    const Text(
                       'Nombre de subcolumna',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF2D3748),
+                      ),
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    _dialogField(
+                      'Ejemplo: Pruebas, Validación, Aprobado...',
                       subColumnNameController,
                       Icons.view_column_rounded,
                     ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Límites: En Proceso permite 2 subcolumnas. Terminado permite 1 subcolumna.',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey,
+
+                    const SizedBox(height: 14),
+
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.orange.withValues(alpha: 0.18),
+                        ),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.info_outline_rounded,
+                            size: 16,
+                            color: Colors.orange,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'En Proceso permite hasta 2 subcolumnas. Terminado permite hasta 1 subcolumna.',
+                              style: TextStyle(
+                                fontSize: 11,
+                                height: 1.35,
+                                color: Colors.orange.shade800,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -383,7 +555,7 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancelar'),
+                  child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
                 ),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
@@ -393,11 +565,8 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
                   onPressed: () async {
                     try {
                       await createSubColumn();
-
                       if (!mounted) return;
-
                       Navigator.pop(context);
-
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('Subcolumna creada correctamente'),
@@ -428,16 +597,18 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
       return ((parent['position'] ?? 0) * 100) + 1;
     }
 
-    final positions = children
-        .map((e) => e['position'] ?? 0)
-        .cast<int>()
-        .toList()
-      ..sort();
+    final positions =
+        children.map((e) => e['position'] ?? 0).cast<int>().toList()..sort();
 
     return positions.last + 1;
   }
 
   Future<void> createSubColumn() async {
+    if (widget.readOnly) {
+      throw Exception(
+        'El supervisor no puede crear columnas',
+      );
+    }
     if (!isLeader) {
       throw Exception('Sólo el líder puede crear subcolumnas');
     }
@@ -478,11 +649,15 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
     channel = supabase
         .channel('kanban_project_${widget.project['id']}')
         .onPostgresChanges(
-          event: PostgresChangeEvent.all, schema: 'public', table: 'tareas',
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'tareas',
           callback: (_) async => await loadBoard(),
         )
         .onPostgresChanges(
-          event: PostgresChangeEvent.all, schema: 'public', table: 'kanban_columnas',
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'kanban_columnas',
           callback: (_) async => await loadBoard(),
         )
         .subscribe();
@@ -491,34 +666,46 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
   Future<void> loadBoard() async {
     final projectId = widget.project['id'];
     final columnsRes = await supabase
-        .from('kanban_columnas').select()
-        .eq('proyecto_id', projectId).eq('status', true)
+        .from('kanban_columnas')
+        .select()
+        .eq('proyecto_id', projectId)
+        .eq('status', true)
         .order('position', ascending: true);
     final tasksRes = await supabase
-        .from('tareas').select()
-        .eq('proyecto_id', projectId).eq('status', true)
+        .from('tareas')
+        .select()
+        .eq('proyecto_id', projectId)
+        .eq('status', true)
         .order('position_in_column', ascending: true)
         .order('created_at', ascending: true);
     if (!mounted) return;
     setState(() {
       columns = List<Map<String, dynamic>>.from(columnsRes);
-      tasks   = List<Map<String, dynamic>>.from(tasksRes);
+      tasks = List<Map<String, dynamic>>.from(tasksRes);
       isLoading = false;
     });
   }
 
-  List<Map<String, dynamic>> tasksByColumn(int columnId) => tasks.where((t) => t['column_id'] == columnId).toList();
+  List<Map<String, dynamic>> tasksByColumn(int columnId) =>
+      tasks.where((t) => t['column_id'] == columnId).toList();
 
   Map<String, dynamic>? getPendingColumn() {
     try {
-      return columns.firstWhere((c) => c['name'].toString().toLowerCase() == 'pendiente');
-    } catch (_) { return null; }
+      return columns
+          .firstWhere((c) => c['name'].toString().toLowerCase() == 'pendiente');
+    } catch (_) {
+      return null;
+    }
   }
 
   int nextPositionInColumn(int columnId) {
     final ct = tasksByColumn(columnId);
     if (ct.isEmpty) return 1;
-    final positions = ct.map((t) => t['position_in_column'] ?? 0).cast<int>().toList()..sort();
+    final positions = ct
+        .map((t) => t['position_in_column'] ?? 0)
+        .cast<int>()
+        .toList()
+      ..sort();
     return positions.last + 1;
   }
 
@@ -538,11 +725,18 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
           children: [
             Container(
               padding: const EdgeInsets.all(7),
-              decoration: BoxDecoration(color: _primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-              child: const Icon(Icons.add_task_rounded, color: _primary, size: 18),
+              decoration: BoxDecoration(
+                  color: _primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8)),
+              child:
+                  const Icon(Icons.add_task_rounded, color: _primary, size: 18),
             ),
             const SizedBox(width: 10),
-            const Text('Nueva actividad', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _primary)),
+            const Text('Actividad',
+                style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: _primary)),
           ],
         ),
         content: SingleChildScrollView(
@@ -564,10 +758,11 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: _primary,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
             ),
             onPressed: () async {
-              final nav       = Navigator.of(context);
+              final nav = Navigator.of(context);
               final messenger = ScaffoldMessenger.of(context);
               try {
                 await createTask();
@@ -584,7 +779,8 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
     );
   }
 
-  Widget _dialogField(String label, TextEditingController ctrl, IconData icon, {int maxLines = 1}) {
+  Widget _dialogField(String label, TextEditingController ctrl, IconData icon,
+      {int maxLines = 1}) {
     return Container(
       decoration: BoxDecoration(
         color: _bgPage,
@@ -607,6 +803,11 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
   }
 
   Future<void> createTask() async {
+    if (widget.readOnly) {
+      throw Exception(
+        'El supervisor no puede crear actividades',
+      );
+    }
     final title = taskTitleController.text.trim();
     if (title.isEmpty) throw Exception('El título es obligatorio');
     final pendingColumn = getPendingColumn();
@@ -623,6 +824,7 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
   }
 
   Future<bool> lockTask(Map<String, dynamic> task) async {
+    if (!canEditBoard) return false;
     final myId = SessionService.profile!['id'];
     final lockedBy = task['locked_by_practicante'];
     if (lockedBy != null && lockedBy != myId) return false;
@@ -635,21 +837,31 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
 
   Future<void> unlockTask(Map<String, dynamic> task) async {
     final myId = SessionService.profile!['id'];
-    await supabase.from('tareas').update({
-      'locked_by_practicante': null,
-      'locked_at': null,
-    }).eq('id', task['id']).eq('locked_by_practicante', myId);
+    await supabase
+        .from('tareas')
+        .update({
+          'locked_by_practicante': null,
+          'locked_at': null,
+        })
+        .eq('id', task['id'])
+        .eq('locked_by_practicante', myId);
   }
 
   Future<void> moveTaskToColumn(Map<String, dynamic> task, int targetColumnId) async {
+    if (!canEditBoard) return;
+
     final myId = SessionService.profile!['id'];
-    await supabase.from('tareas').update({
-      'column_id': targetColumnId,
-      'position_in_column': nextPositionInColumn(targetColumnId),
-      'locked_by_practicante': null,
-      'locked_at': null,
-      'updated_at': DateTime.now().toIso8601String(),
-    }).eq('id', task['id']).eq('locked_by_practicante', myId);
+    await supabase
+        .from('tareas')
+        .update({
+          'column_id': targetColumnId,
+          'position_in_column': nextPositionInColumn(targetColumnId),
+          'locked_by_practicante': null,
+          'locked_at': null,
+          'updated_at': DateTime.now().toIso8601String(),
+        })
+        .eq('id', task['id'])
+        .eq('locked_by_practicante', myId);
   }
 
   bool isTaskLockedByOther(Map<String, dynamic> task) {
@@ -661,7 +873,7 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
   Map<String, dynamic>? activeUserById(int id) {
     try {
       return activeUsers.firstWhere(
-            (e) => e['practicante_id'] == id,
+        (e) => e['practicante_id'] == id,
       );
     } catch (_) {
       return null;
@@ -697,23 +909,34 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
   }
 
   // ─── Colores de columna ───────────────────────────────────────────────────
-  Color _colBg(String name) => _colColors[name.toLowerCase()] ?? const Color(0xFFEDE7F6);
-  Color _colDot(String name) => _colDotColors[name.toLowerCase()] ?? const Color(0xFF6A1B9A);
-  Color _colText(String name) => _colTextColors[name.toLowerCase()] ?? const Color(0xFF4A148C);
+  Color _colBg(String name) =>
+      _colColors[name.toLowerCase()] ?? const Color(0xFFEDE7F6);
+
+  Color _colDot(String name) =>
+      _colDotColors[name.toLowerCase()] ?? const Color(0xFF6A1B9A);
+
+  Color _colText(String name) =>
+      _colTextColors[name.toLowerCase()] ?? const Color(0xFF4A148C);
 
   // ─── Columna estilo Notion ────────────────────────────────────────────────
   Widget buildColumn(Map<String, dynamic> column) {
     final columnTasks = tasksByColumn(column['id']);
-    final bg   = _colBg(column['name']);
-    final dot  = _colDot(column['name']);
+    final bg = _colBg(column['name']);
+    final dot = _colDot(column['name']);
     final text = _colText(column['name']);
     final isMobile = MediaQuery.of(context).size.width < 750;
 
     final isChildColumn = column['parent_column_id'] != null;
 
     return DragTarget<Map<String, dynamic>>(
-      onWillAccept: (task) => !isReadOnly && task != null && !isTaskLockedByOther(task),
-      onAccept:     (task) async { if (!isReadOnly) await moveTaskToColumn(task, column['id']); },
+      onWillAccept: (task) {
+        if (!canEditBoard) return false;
+        return task != null && !isTaskLockedByOther(task);
+      },
+      onAccept: (task) async {
+        if (!canEditBoard) return;
+        await moveTaskToColumn(task, column['id']);
+      },
       builder: (context, candidateData, _) {
         final isDragOver = candidateData.isNotEmpty;
 
@@ -724,8 +947,10 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
               child: Row(
                 children: [
                   Container(
-                    width: 10, height: 10,
-                    decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+                    width: 10,
+                    height: 10,
+                    decoration:
+                        BoxDecoration(color: dot, shape: BoxShape.circle),
                   ),
                   const SizedBox(width: 8),
                   Text(
@@ -738,10 +963,15 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
                   ),
                   const Spacer(),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                    decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                        color: bg, borderRadius: BorderRadius.circular(20)),
                     child: Text('${columnTasks.length}',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: dot)),
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: dot)),
                   ),
                 ],
               ),
@@ -765,7 +995,8 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
         final decoration = BoxDecoration(
           color: isDragOver ? bg.withValues(alpha: 0.6) : _bgColumn,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: isDragOver ? dot : _border, width: isDragOver ? 2 : 1),
+          border: Border.all(
+              color: isDragOver ? dot : _border, width: isDragOver ? 2 : 1),
         );
 
         if (isMobile) {
@@ -833,19 +1064,19 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
         ),
         boxShadow: lockedBy != null
             ? [
-          BoxShadow(
-            color: lockColor.withValues(alpha: 0.20),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ]
+                BoxShadow(
+                  color: lockColor.withValues(alpha: 0.20),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ]
             : [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -861,9 +1092,7 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
                 const SizedBox(width: 5),
                 Expanded(
                   child: Text(
-                    locked
-                        ? 'Moviendo: $lockName'
-                        : 'Moviendo tú',
+                    locked ? 'Moviendo: $lockName' : 'Moviendo tú',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -877,7 +1106,6 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
             ),
             const SizedBox(height: 8),
           ],
-
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -910,35 +1138,84 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
                 ),
               ),
               const SizedBox(width: 8),
-              PopupMenuButton<String>(
-                icon: Icon(
-                  locked ? Icons.lock_rounded : Icons.more_vert,
-                  size: 18,
-                  color: locked ? Colors.grey.shade400 : Colors.grey.shade500,
-                ),
-                enabled: !locked && !isReadOnly,
-                onSelected: (value) async {
-                  if (value == 'edit') {
-                    await showEditTaskDialog(task);
-                  }
+              if (!isReadOnly)...[
+                PopupMenuButton<String>(
+                  icon: Icon(
+                    locked ? Icons.lock_rounded : Icons.more_vert,
+                    size: 18,
+                    color: locked ? Colors.grey.shade400 : Colors.grey.shade500,
+                  ),
+                  enabled: !locked && !isReadOnly,
+                  onSelected: (value) async {
+                    if (value == 'edit') {
+                      await showEditTaskDialog(task);
+                    }
 
-                  if (value == 'delete') {
-                    await deleteTask(task);
-                  }
-                },
-                itemBuilder: (_) {
-                  return const [
-                    PopupMenuItem(
-                      value: 'edit',
-                      child: Text('Editar'),
-                    ),
-                    PopupMenuItem(
-                      value: 'delete',
-                      child: Text('Eliminar'),
-                    ),
-                  ];
-                },
-              ),
+                    if (value == 'delete') {
+                      await deleteTask(task);
+                    }
+                  },
+                  itemBuilder: (_) {
+                    return [
+                      PopupMenuItem(
+                        value: 'edit',
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: _primary.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(
+                                Icons.edit_rounded,
+                                size: 16,
+                                color: _primary,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            const Text(
+                              'Editar actividad',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: Colors.red.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(
+                                Icons.delete_rounded,
+                                size: 16,
+                                color: Colors.red,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            const Text(
+                              'Eliminar actividad',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.red,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ];
+                  },
+                ),
+              ]
             ],
           ),
         ],
@@ -988,13 +1265,25 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
-          title: const Text(
-            'Editar actividad',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
-              color: _primary,
-            ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                    color: _primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8)),
+                child: const Icon(Icons.add_task_rounded, color: _primary, size: 18),
+              ),
+              const SizedBox(width: 8,),
+              const Text(
+                'Editar Actividad',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: _primary,
+                ),
+              ),
+            ],
           ),
           content: SingleChildScrollView(
             child: Column(
@@ -1017,7 +1306,7 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar'),
+              child: const Text('Cancelar', style: TextStyle(color: Colors.grey),),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
@@ -1057,7 +1346,7 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
 
     final code = List.generate(
       8,
-          (_) => chars[random.nextInt(chars.length)],
+      (_) => chars[random.nextInt(chars.length)],
     ).join();
 
     return 'INV-$code';
@@ -1075,9 +1364,8 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
       'created_by_practicante': SessionService.profile!['id'],
       'token': code,
       'status': true,
-      'expires_at': DateTime.now()
-          .add(const Duration(days: 7))
-          .toIso8601String(),
+      'expires_at':
+          DateTime.now().add(const Duration(days: 7)).toIso8601String(),
     });
 
     if (!mounted) return;
@@ -1089,13 +1377,26 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
-          title: const Text(
-            'Código de invitación',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
-              color: _primary,
-            ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                    color: _primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8)),
+                child:
+                const Icon(Icons.send_and_archive_sharp, color: _primary, size: 18),
+              ),
+              const SizedBox(width: 8,),
+              const Text(
+                'Código de Invitación',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: _primary,
+                ),
+              ),
+            ],
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1130,7 +1431,7 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cerrar'),
+              child: const Text('Cerrar', style: TextStyle(color: Colors.grey)),
             ),
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
@@ -1162,6 +1463,12 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
   }
 
   Future<void> updateTask(int taskId) async {
+    if (widget.readOnly) {
+      throw Exception(
+        'El supervisor no puede editar actividades',
+      );
+    }
+
     final title = taskTitleController.text.trim();
 
     if (title.isEmpty) {
@@ -1176,24 +1483,40 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
   }
 
   Future<void> deleteTask(Map<String, dynamic> task) async {
+    if (widget.readOnly) {
+      throw Exception(
+        'El supervisor no puede eliminar actividades',
+      );
+    }
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) {
         return AlertDialog(
-          title: const Text(
-            'Eliminar actividad',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
-            ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                    color: _primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8)),
+                child:
+                const Icon(Icons.delete, color: _primary, size: 18),
+              ),
+              const SizedBox(width: 10),
+              const Text('Eliminar Actividad', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _primary,),),
+            ],
           ),
           content: const Text('¿Desea eliminar esta actividad?'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar'),
+              child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
             ),
             ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _primary,
+                foregroundColor: Colors.white,
+              ),
               onPressed: () => Navigator.pop(context, true),
               child: const Text('Eliminar'),
             ),
@@ -1233,16 +1556,24 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(widget.project['title'], style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis),
-            const SizedBox(height: 3,),
-            Text('Mi rol: ${widget.myRole}', style: const TextStyle(fontSize: 10, color: Colors.white70)),
+            Text(widget.project['title'],
+                style: const TextStyle(fontSize: 14),
+                overflow: TextOverflow.ellipsis),
+            const SizedBox(
+              height: 3,
+            ),
+            Text(
+              widget.readOnly ? 'Modo Supervisor' : 'Mi rol: ${widget.myRole}',
+              style: const TextStyle(fontSize: 10, color: Colors.white70,),
+            )
           ],
         ),
         actions: isReadOnly
             ? [
                 Container(
                   margin: const EdgeInsets.only(right: 12),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(20),
@@ -1251,9 +1582,12 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.visibility_rounded, size: 13, color: Colors.white70),
+                      Icon(Icons.visibility_rounded,
+                          size: 13, color: Colors.white70),
                       SizedBox(width: 5),
-                      Text('Solo lectura', style: TextStyle(fontSize: 11, color: Colors.white70)),
+                      Text('Solo lectura',
+                          style:
+                              TextStyle(fontSize: 11, color: Colors.white70)),
                     ],
                   ),
                 ),
@@ -1261,108 +1595,131 @@ class _ProjectKanbanScreenState extends State<ProjectKanbanScreen> {
             : null,
       ),
       body: isLoading
-        ? const Center(child: CircularProgressIndicator())
-        : Column(
-          children: [
-            // ── Barra superior ───────────────────────────────────
-            Container(
-              color: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                alignment: WrapAlignment.spaceBetween,
-                children: [
-                  Text('${tasks.length} actividades', style: TextStyle(fontSize: 12, color: Colors.grey.shade500,),),
-                  activeUsersBar(),
-                  if (!isReadOnly)
-                  ElevatedButton.icon(
-                    onPressed: showCreateTaskDialog,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _primary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                // ── Barra superior ───────────────────────────────────
+                Container(
+                  color: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    alignment: WrapAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '${tasks.length} actividades',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade500,
+                        ),
                       ),
-                      elevation: 0,
-                    ),
-                    icon: const Icon(Icons.add_rounded, size: 16, color: Colors.white),
-                    label: const Text('Nueva actividad', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),),
+                      activeUsersBar(),
+                      if (!isReadOnly)
+                        ElevatedButton.icon(
+                          onPressed: showCreateTaskDialog,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            elevation: 0,
+                          ),
+                          icon: const Icon(Icons.add_rounded, size: 16, color: Colors.white),
+                          label: const Text('Actividad', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),),
+                        ),
+                      if (isLeader)
+                        ElevatedButton.icon(
+                          onPressed: showCreateSubColumnDialog,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            elevation: 0,
+                          ),
+                          icon: const Icon(
+                            Icons.view_column_rounded,
+                            size: 16,
+                            color: Colors.white,
+                          ),
+                          label: const Text(
+                            'Subcolumna',
+                            style: TextStyle(
+                                fontSize: 13, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                    ],
                   ),
-
-                  if (isLeader)
-                    ElevatedButton.icon(
-                      onPressed: showCreateSubColumnDialog,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _primary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        elevation: 0,
-                      ),
-                      icon: const Icon(Icons.view_column_rounded, size: 16, color: Colors.white,),
-                      label: const Text('Subcolumna', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),),
-                    ),
-                ],
-              ),
-            ),
-            const Divider(height: 1, color: Color(0xFFE5E5E3)),
-            // ── Tablero ──────────────────────────────────────────
-            Expanded(
-              child: isMobile
-                  ? ListView(
-                padding: const EdgeInsets.all(8),
-                children: orderedColumns.map(buildColumn).toList(),
-              )
-                  : LayoutBuilder(
-                builder: (context, constraints) {
-                  const columnWidth = 300.0;
-                  const columnMargin = 16.0;
-
-                  final boardWidth = orderedColumns.length * (columnWidth + columnMargin);
-
-                  return Scrollbar(
-                    controller: horizontalBoardController,
-                    thumbVisibility: true,
-                    child: SingleChildScrollView(
-                      controller: horizontalBoardController,
-                      scrollDirection: Axis.horizontal,
-                      child: SizedBox(
-                        width: boardWidth < constraints.maxWidth
-                            ? constraints.maxWidth
-                            : boardWidth,
-                        height: constraints.maxHeight,
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                ),
+                const Divider(height: 1, color: Color(0xFFE5E5E3)),
+                // ── Tablero ──────────────────────────────────────────
+                Expanded(
+                  child: isMobile
+                      ? ListView(
+                          padding: const EdgeInsets.all(8),
                           children: orderedColumns.map(buildColumn).toList(),
+                        )
+                      : LayoutBuilder(
+                          builder: (context, constraints) {
+                            const columnWidth = 300.0;
+                            const columnMargin = 16.0;
+
+                            final boardWidth = orderedColumns.length *
+                                (columnWidth + columnMargin);
+
+                            return Scrollbar(
+                              controller: horizontalBoardController,
+                              thumbVisibility: true,
+                              child: SingleChildScrollView(
+                                controller: horizontalBoardController,
+                                scrollDirection: Axis.horizontal,
+                                child: SizedBox(
+                                  width: boardWidth < constraints.maxWidth
+                                      ? constraints.maxWidth
+                                      : boardWidth,
+                                  height: constraints.maxHeight,
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: orderedColumns
+                                        .map(buildColumn)
+                                        .toList(),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
                         ),
-                      ),
-                    ),
-                  );
-                },
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
       floatingActionButton: isLeader
           ? FloatingActionButton.extended(
-        backgroundColor: _primary,
-        foregroundColor: Colors.white,
-        onPressed: () async {
-          try {
-            await generateInvitation();
-          } catch (e) {
-            if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()),),);
-          }
-        },
-        icon: const Icon(Icons.person_add_alt_1_rounded),
-        label: const Text('Invitar'),
-      ) : null,
+              backgroundColor: _primary,
+              foregroundColor: Colors.white,
+              onPressed: () async {
+                try {
+                  await generateInvitation();
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(e.toString()),
+                    ),
+                  );
+                }
+              },
+              icon: const Icon(Icons.person_add_alt_1_rounded),
+              label: const Text('Invitar'),
+            )
+          : null,
     );
   }
 }

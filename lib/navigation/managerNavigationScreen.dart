@@ -19,10 +19,99 @@ class ManagerNavigationScreen extends StatefulWidget {
 }
 
 class _ManagerNavigationScreenState extends State<ManagerNavigationScreen> {
-  final SidebarXController _controller =
-      SidebarXController(selectedIndex: 0, extended: true);
-
+  final SidebarXController _controller = SidebarXController(selectedIndex: 0, extended: true);
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  Widget _buildLogoutButton({
+    required bool extended,
+    bool closeDrawer = false,
+  }) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.red.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.red.withValues(alpha: 0.25),
+        ),
+      ),
+      child: ListTile(
+        dense: true,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        leading: Container(
+          padding: const EdgeInsets.all(7),
+          decoration: BoxDecoration(
+            color: Colors.red.withValues(alpha: 0.16),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Icon(
+            Icons.logout_rounded,
+            color: Colors.red,
+            size: 18,
+          ),
+        ),
+        title: extended
+            ? const Text(
+          'Cerrar sesión',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+          ),
+        )
+            : null,
+        onTap: () {
+          if (closeDrawer) {
+            Navigator.pop(context);
+          }
+          _logout();
+        },
+      ),
+    );
+  }
+
+  Widget _buildProfileAvatar() {
+    final names = widget.profile['names'] ?? '';
+    final surname = widget.profile['fathers_surname'] ?? '';
+
+    final initials =
+    '${names.isNotEmpty ? names[0] : ''}'
+        '${surname.isNotEmpty ? surname[0] : ''}'
+        .toUpperCase();
+
+    return Container(
+      width: 42,
+      height: 42,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [
+            Color(0xFF42A5F5),
+            Color(0xFF1565C0),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.15),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Center(
+        child: Text(
+          initials,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.5,
+          ),
+        ),
+      ),
+    );
+  }
 
   final List<Widget> pages = [
     ProjectsManagerScreen(),
@@ -66,53 +155,37 @@ class _ManagerNavigationScreenState extends State<ManagerNavigationScreen> {
     padding: EdgeInsets.zero,
   );
 
-  Widget _buildCircularIcon() => Container(
-    decoration: BoxDecoration(
-      shape: BoxShape.circle,
-      border: Border.all(width: 2, color: Colors.white),
-    ),
-    child: const Icon(Icons.person, color: Colors.white, size: 28),
-  );
-
   Widget _buildHeader(bool extended) => SizedBox(
     height: 100,
     child: Padding(
       padding: const EdgeInsets.all(16),
-      child: extended
-          ? Row(
+      child: extended ? Row(
+        children: [
+          _buildProfileAvatar(),
+          const SizedBox(width: 5),
+          Flexible(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildCircularIcon(),
-                const SizedBox(width: 5),
                 Flexible(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          '${widget.profile['names']} ${widget.profile['fathers_surname']}',
-                          style: const TextStyle(color: Colors.white, fontSize: 12),
-                        ),
-                      ),
-                      Flexible(
-                        child: Text(
-                          widget.profile['role'] ?? '',
-                          style: const TextStyle(color: Colors.white, fontSize: 10),
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    '${widget.profile['names']} ${widget.profile['fathers_surname']}',
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                  ),
+                ),
+                Flexible(
+                  child: Text(
+                    widget.profile['role'] ?? '',
+                    style: const TextStyle(color: Colors.white, fontSize: 10),
                   ),
                 ),
               ],
-            )
-          : _buildCircularIcon(),
+            ),
+          ),
+        ],
+      ) : _buildProfileAvatar(),
     ),
-  );
-
-  Widget _buildFooter(bool extended) => ListTile(
-    leading: const Icon(Icons.logout, color: Colors.white),
-    title: extended ? const Text('Cerrar sesión', style: TextStyle(color: Colors.white)) : null,
-    onTap: _logout,
   );
 
   // ─── Drawer para móvil ────────────────────────────────────────────────────
@@ -127,7 +200,7 @@ class _ManagerNavigationScreenState extends State<ManagerNavigationScreen> {
               padding: const EdgeInsets.all(20),
               child: Row(
                 children: [
-                  _buildCircularIcon(),
+                  _buildProfileAvatar(),
                   const SizedBox(width: 10),
                   Flexible(
                     child: Column(
@@ -159,14 +232,12 @@ class _ManagerNavigationScreenState extends State<ManagerNavigationScreen> {
                   final sel = _controller.selectedIndex == i;
                   return Container(
                     margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: sel
-                        ? BoxDecoration(
-                            borderRadius: BorderRadius.circular(10),
-                            gradient: const LinearGradient(
-                              colors: [sidebarAccentCanvasColor, sidebarCanvasColor],
-                            ),
-                          )
-                        : null,
+                    decoration: sel ? BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      gradient: const LinearGradient(
+                        colors: [sidebarAccentCanvasColor, sidebarCanvasColor],
+                      ),
+                    ) : null,
                     child: ListTile(
                       leading: Icon(item.icon, color: Colors.white, size: 20),
                       title: Text(item.label, style: const TextStyle(color: Colors.white, fontSize: 13)),
@@ -183,13 +254,9 @@ class _ManagerNavigationScreenState extends State<ManagerNavigationScreen> {
             }),
             const Spacer(),
             Divider(color: Colors.white.withValues(alpha: 0.3), height: 1),
-            ListTile(
-              leading: const Icon(Icons.logout, color: Colors.white),
-              title: const Text('Cerrar sesión', style: TextStyle(color: Colors.white)),
-              onTap: () {
-                Navigator.pop(context);
-                _logout();
-              },
+            _buildLogoutButton(
+              extended: true,
+              closeDrawer: true,
             ),
             const SizedBox(height: 8),
           ],
@@ -215,19 +282,36 @@ class _ManagerNavigationScreenState extends State<ManagerNavigationScreen> {
                 decoration: BoxDecoration(color: sidebarCanvasColor),
               ),
               headerDivider: Divider(color: Colors.white.withValues(alpha: 0.3), height: 1),
-              footerDivider: Divider(color: Colors.white.withValues(alpha: 0.3), height: 1),
               headerBuilder: (_, extended) => _buildHeader(extended),
-              footerBuilder: (_, extended) => _buildFooter(extended),
-              items: const [
-                SidebarXItem(icon: Icons.bar_chart, label: 'Proyectos'),
-                SidebarXItem(icon: Icons.groups,    label: 'Practicantes'),
-                SidebarXItem(icon: Icons.chat,      label: 'Comunicados'),
+              items: [
+                const SidebarXItem(icon: Icons.bar_chart, label: 'Proyectos'),
+                const SidebarXItem(icon: Icons.groups, label: 'Practicantes'),
+                const SidebarXItem(icon: Icons.chat, label: 'Comunicados'),
+                SidebarXItem(
+                  icon: Icons.logout_rounded,
+                  label: 'Cerrar sesión',
+                  selectable: false,
+                  onTap: () {
+                    _logout();
+                  },
+                ),
               ],
             ),
             Expanded(
               child: AnimatedBuilder(
                 animation: _controller,
-                builder: (_, __) => pages[_controller.selectedIndex],
+                builder: (_, __) {
+                  if (_controller.selectedIndex == 3) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      _controller.selectIndex(0);
+                      _logout();
+                    });
+
+                    return pages[0];
+                  }
+
+                  return pages[_controller.selectedIndex];
+                },
               ),
             ),
           ],

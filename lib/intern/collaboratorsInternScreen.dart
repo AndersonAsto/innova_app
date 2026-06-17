@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:innova/environments/environments.dart';
 import 'package:innova/main.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -551,101 +552,101 @@ class _CollaboratorsInternScreenState extends State<CollaboratorsInternScreen> {
   @override
   Widget build(BuildContext context) {
     final filtered = _filteredProjects;
-
+    double screenWidth = MediaQuery.of(context).size.width;
     return Scaffold(
       backgroundColor: _bgLight,
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            expandedHeight: 110,
-            pinned: true,
-            automaticallyImplyLeading: false,
-            backgroundColor: _primary,
-            flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Color(0xFF0D2B5E), Color(0xFF1A3A6B)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+      appBar: screenWidth > 700 ? AppBar(
+          backgroundColor: appColors[0],
+          automaticallyImplyLeading: false,
+          title: Row(
+            children: [
+              const Text('Colaboradores', style: TextStyle(color: Colors.white, fontSize: 15),),
+              const SizedBox(width: 10,),
+              Text('(${projects.length} proyectos disponibles)', style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 12)),
+            ],
+          )
+      ) : null ,
+      body: Column(
+        children: [
+          Container(
+            color: _bgLight,
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Container(
+              height: 44,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
                   ),
-                ),
-                padding: const EdgeInsets.fromLTRB(20, 50, 20, 12),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Colaboradores',
-                        style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
-                    Text('${projects.length} proyectos disponibles',
-                        style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 12)),
-                  ],
-                ),
+                ],
               ),
-            ),
-            bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(64),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                child: Container(
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 8, offset: const Offset(0, 3))],
+              child: TextField(
+                controller: _searchController,
+                style: const TextStyle(fontSize: 13),
+                decoration: InputDecoration(
+                  hintText: 'Buscar proyecto o integrante...',
+                  hintStyle: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey.shade400,
                   ),
-                  child: TextField(
-                    controller: _searchController,
-                    style: const TextStyle(fontSize: 13),
-                    decoration: InputDecoration(
-                      hintText: 'Buscar proyecto o integrante...',
-                      hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
-                      prefixIcon: Icon(Icons.search_rounded, color: Colors.grey.shade400, size: 20),
-                      suffixIcon: _searchQuery.isNotEmpty
-                          ? IconButton(
-                              icon: Icon(Icons.close_rounded, color: Colors.grey.shade400, size: 18),
-                              onPressed: () => _searchController.clear(),
-                            )
-                          : null,
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                  prefixIcon: Icon(
+                    Icons.search_rounded,
+                    color: Colors.grey.shade400,
+                    size: 20,
+                  ),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                    icon: Icon(
+                      Icons.close_rounded,
+                      color: Colors.grey.shade400,
+                      size: 18,
                     ),
-                  ),
+                    onPressed: () => _searchController.clear(),
+                  )
+                      : null,
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
                 ),
               ),
             ),
           ),
 
-          if (isLoading)
-            const SliverFillRemaining(child: Center(child: CircularProgressIndicator()))
-          else if (filtered.isEmpty)
-            SliverFillRemaining(
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.search_off_rounded, size: 64, color: Colors.grey.shade300),
-                    const SizedBox(height: 16),
-                    Text(
-                      _searchQuery.isEmpty
-                          ? 'Aún no hay proyectos'
-                          : 'Sin resultados para "$_searchQuery"',
-                      style: const TextStyle(fontSize: 15, color: Colors.grey),
+          Expanded(
+            child: isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : filtered.isEmpty
+                ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.search_off_rounded,
+                    size: 64,
+                    color: Colors.grey.shade300,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    _searchQuery.isEmpty
+                        ? 'Aún no hay proyectos'
+                        : 'Sin resultados para "$_searchQuery"',
+                    style: const TextStyle(
+                      fontSize: 15,
+                      color: Colors.grey,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             )
-          else
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (_, i) => buildProjectCard(filtered[i]),
-                  childCount: filtered.length,
-                ),
-              ),
+                : ListView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+              itemCount: filtered.length,
+              itemBuilder: (_, i) => buildProjectCard(filtered[i]),
             ),
+          ),
         ],
       ),
     );

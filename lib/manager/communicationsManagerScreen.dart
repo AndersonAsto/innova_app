@@ -137,54 +137,103 @@ class _CommunicationsManagerScreenState extends State<CommunicationsManagerScree
 
   Widget buildAnnouncementCard(Map<String, dynamic> announcement) {
     final project = announcement['proyecto'];
-    return Card(
-      elevation: 2,
-      margin: const EdgeInsets.only(bottom: 10),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: appColors[0],
-          child: const Icon(
-            Icons.campaign,
-            color: Colors.white,
-            size: 18,
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
-        ),
-        title: Text(
-          announcement['title'] ?? '',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
+        ],
+        border: Border(
+          left: BorderSide(
             color: appColors[0],
-            fontWeight: FontWeight.bold,
+            width: 4,
           ),
         ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              project?['title'] ?? 'Proyecto no disponible',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 11,
-              ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => showAnnouncementDetails(announcement),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: appColors[0].withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    Icons.campaign_rounded,
+                    color: appColors[0],
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        announcement['title'] ?? '',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: appColors[0],
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: appColors[0].withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          project?['title'] ?? 'Proyecto no disponible',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: appColors[0],
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 7),
+                      Text(
+                        announcement['message_text'] ?? '',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 14,
+                  color: Colors.grey.shade400,
+                ),
+              ],
             ),
-            Text(
-              announcement['message_text'] ?? '',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
+          ),
         ),
-        trailing: const Icon(
-          Icons.arrow_forward_ios,
-          size: 15,
-          color: Colors.black,
-        ),
-        onTap: () {
-          showAnnouncementDetails(announcement);
-        },
       ),
     );
   }
@@ -310,17 +359,6 @@ class _CommunicationsManagerScreenState extends State<CommunicationsManagerScree
     return ListView(
       padding: const EdgeInsets.all(15),
       children: [
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: sendAnnouncements,
-            icon: const Icon(Icons.add),
-            label: const Text('Nuevo anuncio'),
-          ),
-        ),
-
-        const SizedBox(height: 15),
-
         if (announcements.isEmpty)
           const Center(
             child: Padding(
@@ -931,34 +969,146 @@ class _CommunicationsManagerScreenState extends State<CommunicationsManagerScree
     );
   }
 
+  Widget emptyState({
+    required IconData icon,
+    required String text,
+  }) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(25),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 48,
+                color: Colors.grey.shade400,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                text,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.grey.shade600,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget buildChatsTab() {
+    if (projects.isEmpty) {
+      return emptyState(
+        icon: Icons.chat_bubble_outline_rounded,
+        text: 'No hay proyectos disponibles para iniciar chats.',
+      );
+    }
+
     return ListView.builder(
       padding: const EdgeInsets.all(15),
       itemCount: projects.length,
       itemBuilder: (_, index) {
         final project = projects[index];
+        final title = project['title'] ?? 'Proyecto';
+        final initials = title.toString().isNotEmpty
+            ? title.toString().substring(0, 1).toUpperCase()
+            : 'P';
 
-        return Card(
-          elevation: 2,
-          margin: const EdgeInsets.only(bottom: 10),
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: appColors[0],
-              child: Text(
-                project['title'][0],
-                style: const TextStyle(color: Colors.white),
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(16),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () async {
+                await openChatForProject(project);
+              },
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            appColors[0],
+                            appColors[0].withValues(alpha: 0.75),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Center(
+                        child: Text(
+                          initials,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: appColors[0],
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Chat con líder del proyecto',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      Icons.chat_bubble_outline_rounded,
+                      color: appColors[0],
+                      size: 19,
+                    ),
+                  ],
+                ),
               ),
             ),
-            title: Text(project['title']),
-            subtitle: const Text('Chat con líder del proyecto'),
-            trailing: const Icon(
-              Icons.chat,
-              color: Colors.black,
-              size: 18,
-            ),
-            onTap: () async {
-              await openChatForProject(project);
-            },
           ),
         );
       },
@@ -967,16 +1117,16 @@ class _CommunicationsManagerScreenState extends State<CommunicationsManagerScree
 
   @override
   Widget build(BuildContext context) {
+    double screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = MediaQuery.of(context).size.width < 700;
     return DefaultTabController(
       length: 2,
       child: Scaffold(
         appBar: AppBar(
           backgroundColor: appColors[0],
           automaticallyImplyLeading: false,
-          title: const Text(
-            'Comunicados',
-            style: TextStyle(color: Colors.white, fontSize: 15),
-          ),
+          title: screenWidth > 700 ? const Text('Comunicados', style: TextStyle(color: Colors.white, fontSize: 15),) : null,
+          toolbarHeight: isMobile ? 10 : kToolbarHeight,
           bottom: TabBar(
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white70,
@@ -1029,7 +1179,7 @@ class _CommunicationsManagerScreenState extends State<CommunicationsManagerScree
           onPressed: () => sendAnnouncements(),
           mini: true,
           backgroundColor: appColors[0],
-          tooltip: 'Crear proyecto',
+          tooltip: 'Crear anuncio',
           hoverColor: const Color(0x52FFFFFF),
           child: const Icon(Icons.add, color: Colors.white,),
         ),

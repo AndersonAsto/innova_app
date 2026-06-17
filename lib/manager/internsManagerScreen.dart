@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:innova/environments/custom.widgets.dart';
+import 'package:innova/environments/environments.dart';
 import 'dart:math';
 import 'package:innova/main.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -623,40 +624,22 @@ class _InternsManagerScreenState extends State<InternsManagerScreen> {
   // ─── Pantalla principal ────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    double screenWidth = MediaQuery.of(context).size.width;
     return Scaffold(
       backgroundColor: _bgLight,
+      appBar: screenWidth > 700 ? AppBar(
+        backgroundColor: appColors[0],
+        automaticallyImplyLeading: false,
+        title: Row(
+          children: [
+            const Text('Prácticantes', style: TextStyle(color: Colors.white, fontSize: 15),),
+            const SizedBox(width: 10,),
+            Text('(${managers.length} gestores · ${interns.length} practicantes)', style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 12)),
+          ],
+        ),
+      ) : null,
       body: CustomScrollView(
         slivers: [
-          // ── Header con stats ─────────────────────────────────────────
-          SliverAppBar(
-            expandedHeight: 110,
-            pinned: true,
-            automaticallyImplyLeading: false,
-            backgroundColor: _primary,
-            flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Color(0xFF0D2B5E), Color(0xFF1A3A6B)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-                padding: const EdgeInsets.fromLTRB(20, 50, 20, 12),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Practicantes',
-                        style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
-                    Text('${managers.length} gestores · ${interns.length} practicantes',
-                        style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 12)),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
           // ── Contenido ────────────────────────────────────────────────
           if (isLoading)
             const SliverFillRemaining(child: Center(child: CircularProgressIndicator()))

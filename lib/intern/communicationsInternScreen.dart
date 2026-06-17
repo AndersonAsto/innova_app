@@ -930,8 +930,9 @@ class _CommunicationsInternScreenState extends State<CommunicationsInternScreen>
 
   @override
   Widget build(BuildContext context) {
-    final tabs = isLeaderUser
-        ? [
+    double screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = MediaQuery.of(context).size.width < 700;
+    final tabs = isLeaderUser ? [
       const Tab(icon: Icon(Icons.campaign), text: 'Anuncios'),
       Tab(
         icon: Stack(
@@ -944,10 +945,7 @@ class _CommunicationsInternScreenState extends State<CommunicationsInternScreen>
                 top: -8,
                 child: Container(
                   padding: const EdgeInsets.all(4),
-                  decoration: const BoxDecoration(
-                    color: Colors.red,
-                    shape: BoxShape.circle,
-                  ),
+                  decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle,),
                   child: Text(
                     unreadChatNotifications.toString(),
                     style: const TextStyle(
@@ -962,21 +960,16 @@ class _CommunicationsInternScreenState extends State<CommunicationsInternScreen>
         ),
         text: 'Chats',
       ),
-    ]
-        : const [
+    ] : const [
       Tab(icon: Icon(Icons.campaign), text: 'Anuncios'),
     ];
 
-    final views = isLeaderUser
-        ? [
+    final views = isLeaderUser ? [
       buildAnnouncementsTab(),
       buildChatsTab(),
-    ]
-        : [
+    ] : [
       buildAnnouncementsTab(),
     ];
-
-    double screenWidth = MediaQuery.of(context).size.width;
 
     return DefaultTabController(
       length: tabs.length,
@@ -985,11 +978,8 @@ class _CommunicationsInternScreenState extends State<CommunicationsInternScreen>
         appBar: AppBar(
           backgroundColor: appColors[0],
           automaticallyImplyLeading: false,
-          elevation: 0,
-          title: const Text(
-            'Comunicados',
-            style: TextStyle(color: Colors.white, fontSize: 15),
-          ),
+          title: screenWidth > 700 ? const Text('Comunicados', style: TextStyle(color: Colors.white, fontSize: 15),) : null,
+          toolbarHeight: isMobile ? 10 : kToolbarHeight,
           bottom: TabBar(
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white70,

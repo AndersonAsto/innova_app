@@ -424,22 +424,58 @@ class _ProjectsInternScreenState extends State<ProjectsInternScreen> {
       context: context,
       builder: (_) {
         return AlertDialog(
-          title: const Text(
-            'Eliminar documento',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
-            ),
+          contentPadding: EdgeInsets.all(10),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                    color: _primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8)),
+                child:
+                const Icon(Icons.delete, color: _primary, size: 18),
+              ),
+              const SizedBox(width: 10),
+              const Text('Eliminar Documento', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _primary,),),
+            ],
           ),
-          content: Text(
-            '¿Desea eliminar definitivamente "${doc['file_name']}"?',
+          content: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.orange.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: Colors.orange.withValues(alpha: 0.18),
+              ),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.info_outline_rounded,
+                  size: 16,
+                  color: Colors.orange,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text('¿Desea eliminar definitivamente "${doc['file_name']}"?',
+                    style: TextStyle(fontSize: 11, height: 1.35, color: Colors.orange.shade800,),
+                  ),
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar'),
+              child: const Text('Cancelar', style: TextStyle(color: Colors.grey),),
             ),
             ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _primary,
+                foregroundColor: Colors.white,
+              ),
               onPressed: () => Navigator.pop(context, true),
               child: const Text('Eliminar'),
             ),
@@ -539,27 +575,68 @@ class _ProjectsInternScreenState extends State<ProjectsInternScreen> {
                         ],
                       ),
                     ),
-
-                    const SizedBox(height: 14),
-
-                    TextField(
-                      controller: documentSearchController,
-                      decoration: InputDecoration(
-                        hintText: 'Buscar por nombre de archivo...',
-                        prefixIcon: const Icon(Icons.search),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onChanged: (value) {
-                        setModalState(() {
-                          documentSearch = value;
-                        });
-                      },
-                    ),
-
                     const SizedBox(height: 12),
-
+                    Container(
+                      height: 46,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF7F7F5),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: const Color(0xFFE5E5E3),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.04),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: TextField(
+                        controller: documentSearchController,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF1A1A1A),
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Buscar por nombre de archivo...',
+                          hintStyle: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade500,
+                          ),
+                          prefixIcon: Icon(
+                            Icons.search_rounded,
+                            size: 20,
+                            color: Colors.grey.shade500,
+                          ),
+                          suffixIcon: documentSearch.isNotEmpty
+                              ? IconButton(
+                            icon: Icon(
+                              Icons.close_rounded,
+                              size: 18,
+                              color: Colors.grey.shade500,
+                            ),
+                            onPressed: () {
+                              setModalState(() {
+                                documentSearchController.clear();
+                                documentSearch = '';
+                              });
+                            },
+                          ) : null,
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 13,
+                          ),
+                        ),
+                        onChanged: (value) {
+                          setModalState(() {
+                            documentSearch = value;
+                          });
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     if (isLeader)
                       SizedBox(
                         width: double.infinity,
@@ -1176,10 +1253,10 @@ class _ProjectsInternScreenState extends State<ProjectsInternScreen> {
   @override
   Widget build(BuildContext context) {
     final activeCount = projects.where((p) => (p['proyecto']?['status'] ?? false) == true).length;
-
+    double screenWidth = MediaQuery.of(context).size.width;
     return Scaffold(
       backgroundColor: _bgLight,
-      appBar: AppBar(
+      appBar: screenWidth > 700 ? AppBar(
         backgroundColor: appColors[0],
         automaticallyImplyLeading: false,
         title: Row(
@@ -1189,7 +1266,7 @@ class _ProjectsInternScreenState extends State<ProjectsInternScreen> {
             Text('(${projects.length} proyectos · $activeCount activos)', style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 12)),
           ],
         )
-      ),
+      ) : null ,
       body: CustomScrollView(
         slivers: [
           if (isLoading)
