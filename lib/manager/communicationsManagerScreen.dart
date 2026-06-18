@@ -836,135 +836,312 @@ class _CommunicationsManagerScreenState extends State<CommunicationsManagerScree
     chatMessageController.clear();
   }
 
-  Future<void> sendAnnouncements () async {
+  Future<void> sendAnnouncements() async {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
+      backgroundColor: Colors.transparent,
       builder: (context) {
         return Padding(
           padding: EdgeInsets.only(
             bottom: MediaQuery.of(context).viewInsets.bottom,
           ),
           child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                buildAnnouncementsTabContent()
-              ],
-            ),
+            child: buildAnnouncementsTabContent(),
           ),
         );
-      }
+      },
     );
   }
 
   Widget buildAnnouncementsTabContent() {
-    return Padding(
-      padding: const EdgeInsets.all(15),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(15),
-            decoration: BoxDecoration(
-              color: appColors[0],
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(15),
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFFF5F6FA),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(24),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    appColors[0],
+                    appColors[0].withValues(alpha: 0.78),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: [
+                  BoxShadow(
+                    color: appColors[0].withValues(alpha: 0.22),
+                    blurRadius: 14,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(9),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.campaign_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Enviar anuncio',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'El comunicado será visible para los integrantes del proyecto.',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
-            child: const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Enviar Anuncio', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold,),),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<Map<String, dynamic>>(
-            isExpanded: true,
-            value: selectedAnnouncementProject,
-            decoration: const InputDecoration(
-              labelText: 'Proyecto',
-              border: OutlineInputBorder(),
-            ),
-            items: projects.map((project) {
-              return DropdownMenuItem<Map<String, dynamic>>(
-                value: project,
-                child: Text(project['title'], overflow: TextOverflow.ellipsis,),
-              );
-            }).toList(),
-            onChanged: (value) {
-              setState(() {
-                selectedAnnouncementProject = value;
-              });
-            },
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: announcementTitleController,
-            decoration: const InputDecoration(
-              labelText: 'Título',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: announcementMessageController,
-            maxLines: 5,
-            decoration: const InputDecoration(
-              labelText: 'Mensaje',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: announcementMeetingUrlController,
-            decoration: const InputDecoration(
-              labelText: 'Enlace de reunión (Opcional)',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: announcementVideoUrlController,
-            decoration: const InputDecoration(
-              labelText: 'Video (Opcional)',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () async {
-                    try {
-                      await createAnnouncement();
-                      await loadAnnouncements();
 
-                      if (!mounted) return;
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Anuncio enviado correctamente'),
-                        ),
-                      );
-                    } catch (e) {
-                      if (!mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(e.toString())),
-                      );
-                    }
-                  },
-                  icon: const Icon(Icons.campaign),
-                  label: const Text('Enviar anuncio'),
+            const SizedBox(height: 16),
+
+            _announcementDropdown(),
+
+            const SizedBox(height: 12),
+
+            _announcementField(
+              controller: announcementTitleController,
+              label: 'Título',
+              icon: Icons.title_rounded,
+            ),
+
+            const SizedBox(height: 12),
+
+            _announcementField(
+              controller: announcementMessageController,
+              label: 'Mensaje',
+              icon: Icons.notes_rounded,
+              maxLines: 5,
+            ),
+
+            const SizedBox(height: 12),
+
+            _announcementField(
+              controller: announcementMeetingUrlController,
+              label: 'Enlace de reunión',
+              icon: Icons.videocam_outlined,
+              optional: true,
+            ),
+
+            const SizedBox(height: 12),
+
+            _announcementField(
+              controller: announcementVideoUrlController,
+              label: 'Video',
+              icon: Icons.play_circle_outline_rounded,
+              optional: true,
+            ),
+
+            const SizedBox(height: 18),
+
+            SizedBox(
+              width: double.infinity,
+              height: 46,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: appColors[0],
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                 ),
-              )
-            ],
-          )
-        ],
+                onPressed: () async {
+                  try {
+                    await createAnnouncement();
+                    await loadAnnouncements();
+
+                    if (!mounted) return;
+
+                    Navigator.pop(context);
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Anuncio enviado correctamente'),
+                      ),
+                    );
+                  } catch (e) {
+                    if (!mounted) return;
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(e.toString()),
+                      ),
+                    );
+                  }
+                },
+                icon: const Icon(
+                  Icons.send_rounded,
+                  color: Colors.white,
+                  size: 18,
+                ),
+                label: const Text(
+                  'Enviar anuncio',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _announcementDropdown() {
+    return DropdownButtonFormField<Map<String, dynamic>>(
+      isExpanded: true,
+      value: selectedAnnouncementProject,
+      dropdownColor: Colors.white,
+      decoration: InputDecoration(
+        labelText: 'Proyecto',
+        labelStyle: TextStyle(
+          color: Colors.grey.shade600,
+          fontSize: 12,
+        ),
+        prefixIcon: Icon(
+          Icons.folder_outlined,
+          color: appColors[0],
+          size: 19,
+        ),
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 13,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(
+            color: Colors.grey.shade200,
+          ),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(
+            color: Colors.grey.shade200,
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(
+            color: appColors[0],
+            width: 1.3,
+          ),
+        ),
+      ),
+      items: projects.map((project) {
+        return DropdownMenuItem<Map<String, dynamic>>(
+          value: project,
+          child: Text(
+            project['title'],
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        );
+      }).toList(),
+      onChanged: (value) {
+        setState(() {
+          selectedAnnouncementProject = value;
+        });
+      },
+    );
+  }
+
+  Widget _announcementField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    int maxLines = 1,
+    bool optional = false,
+  }) {
+    return TextField(
+      controller: controller,
+      maxLines: maxLines,
+      style: const TextStyle(
+        fontSize: 13,
+        color: Color(0xFF1F2937),
+      ),
+      decoration: InputDecoration(
+        labelText: optional ? '$label (opcional)' : label,
+        labelStyle: TextStyle(
+          color: Colors.grey.shade600,
+          fontSize: 12,
+        ),
+        prefixIcon: Icon(
+          icon,
+          color: appColors[0],
+          size: 19,
+        ),
+        alignLabelWithHint: maxLines > 1,
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 13,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(
+            color: Colors.grey.shade200,
+          ),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(
+            color: Colors.grey.shade200,
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(
+            color: appColors[0],
+            width: 1.3,
+          ),
+        ),
       ),
     );
   }
